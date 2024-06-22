@@ -3318,10 +3318,10 @@
   (symbol (lib_id "Switch:SW_Push") (at 302.26 53.34 0) (mirror y) (unit 1)
     (in_bom yes) (on_board yes) (dnp no)
     (uuid 479256d3-62e7-490f-ac0c-525a98f2ec2e)
-    (property "Reference" "SW2" (at 307.34 45.8358 0)
+    (property "Reference" "SW1" (at 307.34 45.8358 0)
       (effects (font (size 1.27 1.27)) (justify left))
     )
-    (property "Value" "SW_Push" (at 307.34 48.26 0)
+    (property "Value" "B3U-1000P" (at 307.34 48.26 0)
       (effects (font (size 1.27 1.27)) (justify left))
     )
     (property "Footprint" "Button_Switch_SMD:SW_SPST_B3U-1000P" (at 302.26 48.26 0)
@@ -3338,7 +3338,7 @@
     (instances
       (project "Simple Altimeter"
         (path "/80f3d735-68fa-4a00-8377-fe541c005eac"
-          (reference "SW2") (unit 1)
+          (reference "SW1") (unit 1)
         )
       )
     )
