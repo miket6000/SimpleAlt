@@ -1,48 +1,84 @@
 # Highlevel overview
 
-## At the PC
+## Hardware must knows.
 
-Plugging the SimpleAlt into a USB connector will result in three things happening.
-1. The altimeter will automatically power on.
-2. The battery will start charging.
-3. The altimeter should enumerate as a USB mass storage device to allow transfer of flight data from the built in flash.
+### The debug header
 
-Ideally (I don't know how hard this is) we would be able to provide the data as seperate files, 1 per flight (a flight being a full power on - landing cycle as described in the "In the Field" section. Files would ideally be available as CSV, but ideally stored in flash as raw binary data (faster to write and less space). I don't know how feasible a "realtime" conversion from Binary to CSV is. Binary data dump is probably OK and certainly acceptable initially, just needs more transforming on the PC which is not a big deal. Benefit of CSV output is it allows the user to dump data directly into Excel which will have a wider appeal than a custom application.
+The debug header is the 5 pin header. It exposes 3V3, Boot, SWDCLK, SWDIO and GND. 
 
-If, prior to plugging in the altimeter into the USB port, the device is in power down mode and pins 1 (3V3) & 2 (BOOT) of the debug header are shorted together, then the altimeter will start up in DFU mode. Because this requires working software (i.e. the device needs to be able to power down which it won't necessarily do if the software does not implement this), it is advised to perform development without the battery installed. Alternatively it should be possible to force a reset by using SWD which will cause the boot pin state to be read.
+### Getting into DFU mode
 
-For the file format that the user sees I see there are two options (there may be more, I'm open to suggestions). This depends mostly on whether we can do on the fly CSV creation in Mass Storage mode. Initial development should focus on Raw data.
+In order to enter DFU mode we need a reset or power up to occur. This can be forced by shorting both pins of the shutdown header (the small two pin header beside the debug header). This forces the STNS01 to disable the LDO and all power is lost to the STM32F042. We can re-enable power by plugging in the USB, but first you need to short the boot pin to 3V3 which can be done by shorting pins 1 (3V3) and 2 (Boot) of the debug header. 
 
-### Raw data
+### The STNS01 (Magic Chip)
 
-Binary dump. PC app can calculate real altitude, velocity, acceleration, etc.
+This chip does the charging, battery protection, and provides the LDO for the rest of the system. 
+The shutdown pin is useful for killing power to everything. This will maximise the life of the battery but needs the board to be plugged into USB in order to wake it up, so isn't very user friendly.
+There is a CEN (Charge ENable) pin on the device. This can disable charging, though I don't think we ever want to do this so this pin should probably just be left high always. There is an internal pullup, but the datasheet recommends pulling it high for reliability.
+The !CHG pin is driven by the STNS01. It will go low when charging, and high when charging completes. If there is an error it will pulse this pin at 1Hz and stop charging. We can re-enable charging by pulsing the CEN pin low then high, but this seems unwise.
+The charging current is set to ~40mA which is approximately 1C charge for the included battery.
 
-### On the fly CSV mode
+### The BMP280
 
-CSV file with Time, Flags, Temperature, RAW Barometer Data, Calculated Altitude.
+The barometer. 
+The datasheet shows the calculations (in fixed point, thankfully) for correcting the measurements to obtain atmospheric pressure using the built in calibration data. I'm assuming there are several pre-implemented libraries for this device already.
 
-## In the Field
+### The Flash
+
+Yuck, I hate flash. 
+2MB is available in 256B pages. Datasheet is in docs folder, but again I assume this is well covered by pre-implemented libraries.
+
+### STM32F042G6U6
+
+Main brain. 
+Of particular note is PA0 which is connected to the button. PA0 is also the WKUP0 pin which can be used to wake the micro from any sleep mode so options exist there for deep sleep which is easier to wake from than using the STNS01 shutdown pin, however system power draw will be significantly higher. It might not make sense to actually use this mode as it's then impossible to transition to a lower power state, or indicate to the user that they're not in the lowest possible power state. 
+
+It is possible to measure the battery voltage, however to reduce power consumption you will need to enable the voltage divider by putting the !SENSE\_EN pin low first. Being a lithium battery the voltage curve is pretty flat, until it's not. We can react by preemtively putting the STNS01 into shutdown mode earlier than the battery protection circuit would in order to protect the battery. Maybe at 3.2V?
+
+## Desired end product behaviour
+
+### In the Field
 
 In the field user operation is intended to be as follows.
-1. Assuming the device is in power down mode, the user will push the power button to apply power to the altimeter. The altimeter must immediately assert the "Stay Alive" pin to ensure that once the user releases the power button, power remains on. Here is where we should take a temperature measurement from the BMP280.
-2. If there is record of a previous flight, the altimeter should flash out the altitude, e.g. if the previous flight was 132m, the altimeter should flash .-...-.. where a '.' represents a short (0.5s?) flash followed by a short delay (0.5s?) and '-' represents a longer delay (1s?).
-3. There will be some preconfigured (possibly constant, initially assumed to be aproximately 1 minute) time during which it is intended that the user is able to install the altimeter in the rocket. During this time the altimeter should flash occasionally e.g. A single 0.5s flash every 4s.
-4. At this time we are waiting for launch and should be sampling the barometer as quickly as is feasible, >20Hz into a circular buffer. 
-5. If we detect an increase in altitude corresponding to ~10m over a 0.5s period we can assume a launch. We will need to look backwards in the ring buffer to determine what the "ground level" pressure was. We should record a "launch" event.
-6. We should record the barometric pressure in it's raw form to the flash. How much is buffered between writes will need to be determined based on available RAM, expected flight duration, etc.
-7. When the pressure starts to decrease we should record an "apogee" event. It is possible to reduce the sampling speed of the barometer now if it's helpful, though this is not a requirement.
-8. When we detect that the pressure has stopped changing (i.e. < 1m/second) for ~3 seconds we can be confident we're on the ground so can record a "landed" event.
-9. We should now flash out the apogee height using the previously mentioned method for ~3 minutes with an ~10 second delay between reports. The intent is that this should be enough time for the user to find the rocket and view their flight altitude, but not so long that it uses excessive battery power, or prevents the user "immediately" reloading and reusing the rocket. There might be a better way to achieve this, initial logging will be useful to help determine.
-10. It's time to power down. Ensure everything is in a good state, and put the "Stay Alive" pin low. Very shortly after power will be lost so all state will be reset ready for the next launch.
+1. Assuming the device is in power down mode, the user will push the power button to wake up the altimeter. 
+2. Here is where we should take a temperature measurement from the BMP280. This turns out to not be used in the calculations for competition grade altimeters. This is done manually and recorded in the submission sheet, however having a record of ambient temperature is required for the calculation, so we may as well capture it now.
+3. If there is record of a previous flight, the altimeter should flash out the altitude, e.g. if the previous flight was 132m, the altimeter should flash .-...-.. where a '.' represents a short (0.5s?) flash followed by a short delay (0.5s?) and '-' represents a longer delay (1s?).
+4. There will be some preconfigured (possibly constant, initially assumed to be aproximately 1 minute) time during which it is intended that the user is able to install the altimeter in the rocket. During this time the altimeter should flash occasionally e.g. A single 0.5s flash every 4s.
+5. After the delay timer has expired, we are waiting for launch and should start sampling the barometer quickly (>20Hz) into a circular buffer.
+6. If we detect an increase in altitude corresponding to ~10m (70Pa) over a 0.5s period we can assume a launch. We will need to look backwards in the ring buffer to determine what the "ground level" pressure was. We should record a "launch" event.
+7. We should record the barometric pressure in it's raw form to the flash. How much is buffered between writes will need to be determined based on available RAM, expected flight duration, etc.
+8. When the pressure starts to increase again we should record an "apogee" event.
+9. When we detect that the pressure has stopped changing (i.e. < 1m/second, or <7Pa/s) for ~3 seconds we can be confident we're on the ground so can record a "landed" event.
+10. We should now flash out the apogee height using the previously mentioned method for ~3 minutes with an ~10 second delay between reports. The intent is that this should be enough time for the user to find the rocket and view their flight altitude, but not so long that it uses excessive battery power, or prevents the user "immediately" reloading and reusing the rocket. There might be a better way to achieve this, initial logging will be useful to help determine.
+11. It's time to power down. I'm not sure exactly what to do here. Go into some form of low power mode that still allows us to flash the LED every 10s or so, to indicate that we're not in power off mode? Screw it and go into proper power off mode and require the user to plug the logger into USB again? Neither are perfect. If we do go into a "sleep" mode, we'll want to fall back into proper power off mode after some period (an hour maybe?) of inactivity anyway to save the battery. It'll depend on power usage.
 
 Ideally the flash would be arranged into a sort of ring buffer itself, where each flight would be recorded, and each next flight would create a new entry. If there is insufficient space for a new flight then the oldest flight is erased at this point to allow the new flight to be recorded.
 
-If we use a constant sampling rate then timing is easy to reconstruct on a PC later. If it's variable we'll need to include the sampling rate (or indicating flag) somehow into the data.
+I'm assuming that we'll store raw barometer data and calculate the apogee after landing, just prior to displaying it to the user. That said, if we're waiting for the next reading from the BMP280 anyway, we may as well calculate the altitude for each sample? 
 
-It is assumed that we'll store raw barometer data and calculate the apogee after landing, just prior to displaying it to the user. In order to turn pressure into altitude we need to know the bulk air temperature (not the temperature inside the rocket which can be higher due to solar heating). That's why it should be measured at power up when we know that the user has pressed the button. They may be artificially heating the sensor, but it's the best we can do (I think, possibly we could look for longer and use a minimum measurement?).
+The NAR (National Association of Rocketry) in the US expects all altimeters to use the standard model of atmosphere which is the one described above (see wikipedia for more information). This model assumes an air temperature of 15C which they expect the altimeter user to manually adjust for using a linear adjustment from absolute zero. For the sake of simplicity, it's probably worth us doing the same. 
 
-It is possible to measure battery voltage, I don't know what we want to do with this information at this stage. It's possible not too useful unless it's below 3.2V in which case we could basically "play dead" in order to protect the cell, by refusing to hold the "Stay Alive" pin high. We might want to indicate this to the user with some sort if LED indication before de-asserting the pin. 
+#### Button behaviour
 
+Good question.
+Short press = wake up please and show me the last peak altitude reading (I want to fly, or see what my last height was).
+Long press = go to sleep please, whatever state you were in, forget it (This flight is a scrub, or I just wanted to know what the last flight was again).
+Very long press = power off and don't come back (I'm done for the day and going home).
+?
 
+#### LED behaviour
+
+Flashing out altitude - discussed above.
+"Pre-flight delay" = occasional flash           .--------.--------?
+"Armed and waiting for launch" = double blink   .-.---.-.---.-.---?
+"Snoozing" = very occasional flash              .-----------------?
+
+### At the PC
+
+Plugging the SimpleAlt into a USB connector should result in the folowing things happening..
+1. The battery will start charging (this is automatic)
+2. The altimeter should enumerate as a USB mass storage device to allow transfer of flight data from the built in flash.
+
+Ideally (I don't know how hard this is) we would be able to provide the data as seperate files, 1 per flight (a flight being a full power on - landing cycle as described in the "In the Field" section. Files would ideally be available as CSV, but ideally stored in flash as raw binary data (faster to write and less space). I don't know how feasible a "realtime" conversion from Binary to CSV is. Binary data dump is probably OK and certainly acceptable initially, just needs more transforming on the PC which is not a big deal. Benefit of CSV output is it allows the user to dump data directly into Excel which will have a wider appeal than a custom application.
 
 
