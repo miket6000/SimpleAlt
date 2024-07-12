@@ -57,6 +57,8 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define BUTTON_Pin GPIO_PIN_0
+#define BUTTON_GPIO_Port GPIOA
 #define nSENSE_EN_Pin GPIO_PIN_1
 #define nSENSE_EN_GPIO_Port GPIOA
 #define CHARGE_EN_Pin GPIO_PIN_2
@@ -67,6 +69,8 @@ void Error_Handler(void);
 #define SHUTDOWN_GPIO_Port GPIOA
 #define BATT_SENSE_Pin GPIO_PIN_6
 #define BATT_SENSE_GPIO_Port GPIOA
+#define LED_Pin GPIO_PIN_0
+#define LED_GPIO_Port GPIOB
 #define BMP_CS_Pin GPIO_PIN_15
 #define BMP_CS_GPIO_Port GPIOA
 #define FLASH_CS_Pin GPIO_PIN_7
