@@ -100,6 +100,8 @@ int main(void)
   /* Setup STMS01 pins to default "Power On" states */
   HAL_GPIO_WritePin(SHUTDOWN_GPIO_Port, SHUTDOWN_Pin, GPIO_PIN_RESET);
   HAL_GPIO_WritePin(CHARGE_EN_GPIO_Port, CHARGE_EN_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(BMP_CS_GPIO_Port, BMP_CS_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(FLASH_CS_GPIO_Port, FLASH_CS_Pin, GPIO_PIN_SET);
 
   /* Enable timer interrupt for LED and button timing */
   HAL_TIM_Base_Start_IT(&htim16);
@@ -116,7 +118,26 @@ int main(void)
   {
     /* USER CODE END WHILE */
     /* USER CODE BEGIN 3 */
-    
+/*  
+    switch (state) {
+      case IDLE:
+        break;
+      case READY:
+        break;
+      case INFLIGHT:
+        break;
+      case LANDED:
+        break;
+      case STANDBY:
+        break;
+      case POWERDOWN:
+        break;
+      case CONNECTED:
+        break;
+      default:
+        break;
+    }
+*/
     if (sleep == 0) {
       // Stay awake, can use "sleep mode" to save power, will wake on interrupt.
       // disabled below for debugging more complex sleep modes.
@@ -199,7 +220,7 @@ uint8_t Button(void) {
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
-  static uint8_t button_counter = 0;
+  static uint16_t button_counter = 0;
   static uint8_t led_counter = 0;
 
   // Check which version of the timer triggered this callback and toggle LED
