@@ -53,7 +53,7 @@ uint8_t sleep = 0;
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-void PowerDown(void);
+void PowerDown(uint8_t level);
 uint8_t Button(void);
 /* USER CODE END PFP */
 
