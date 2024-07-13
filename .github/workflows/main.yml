@@ -1,0 +1,25 @@
+on:
+  push:
+    branches:
+      - main
+      - relase/*
+      
+jobs:
+  build:
+    runs-on: debian-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+      with:
+        submodules: recursive
+
+    - name: arm-none-eabi-gcc
+      uses: ryanwinter/arm-none-eabi-gcc@master
+      with:
+        release: '10-2021.10'
+
+    - name: Build binary
+      run: |
+        cd firmware
+        make 
