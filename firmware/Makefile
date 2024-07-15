@@ -215,6 +215,10 @@ $(BUILD_DIR):
 #######################################
 clean:
 	-rm -fR $(BUILD_DIR)
+
+program: $(BUILD_DIR)/$(TARGET).bin | $(BUILD_DIR)
+	dfu-util -a 0 -D $(BUILD_DIR)/$(TARGET).bin -s 0x08000000
+
   
 program: $(BUILD_DIR)/$(TARGET).bin | $(BUILD_DIR)
 	dfu-util -a 0 -D $(BUILD_DIR)/$(TARGET).bin -s 0x08000000
