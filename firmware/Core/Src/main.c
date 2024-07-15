@@ -19,11 +19,12 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "adc.h"
+#include "dma.h"
 #include "spi.h"
 #include "tim.h"
 #include "usb_device.h"
+#include "usbd_cdc_if.h"
 #include "gpio.h"
-
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "led.h"
@@ -48,6 +49,8 @@
 
 /* USER CODE BEGIN PV */
 uint8_t sleep = 0;
+extern uint8_t UserRxBufferFS[APP_RX_DATA_SIZE];
+extern uint8_t UserTxBufferFS[APP_TX_DATA_SIZE];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -55,6 +58,8 @@ void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
 void PowerDown(uint8_t level);
 uint8_t Button(void);
+void USBD_CDC_RxHandler(uint8_t *rxBuffer, uint32_t *len);
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -70,7 +75,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-
+  uint8_t txBuffer[] = "Hello World\n\r";
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -91,24 +96,26 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_ADC_Init();
   MX_SPI1_Init();
   MX_USB_DEVICE_Init();
   MX_TIM16_Init();
   /* USER CODE BEGIN 2 */
 
-  /* Setup STMS01 pins to default "Power On" states */
+  /* Setup GPIO to sensible "Power On" states */
   HAL_GPIO_WritePin(SHUTDOWN_GPIO_Port, SHUTDOWN_Pin, GPIO_PIN_RESET);
   HAL_GPIO_WritePin(CHARGE_EN_GPIO_Port, CHARGE_EN_Pin, GPIO_PIN_SET);
   HAL_GPIO_WritePin(BMP_CS_GPIO_Port, BMP_CS_Pin, GPIO_PIN_SET);
   HAL_GPIO_WritePin(FLASH_CS_GPIO_Port, FLASH_CS_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(nSENSE_EN_GPIO_Port, nSENSE_EN_Pin, GPIO_PIN_SET);
 
   /* Enable timer interrupt for LED and button timing */
   HAL_TIM_Base_Start_IT(&htim16);
 
   /* nott 100% sure this is still needed, part of debugging sleep behaviour
    * try removing. */
-  HAL_PWR_DisableWakeUpPin(PWR_WAKEUP_PIN1);
+  //HAL_PWR_DisableWakeUpPin(PWR_WAKEUP_PIN1);
 
   /* USER CODE END 2 */
 
@@ -117,6 +124,7 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
+
     /* USER CODE BEGIN 3 */
 /*  
     switch (state) {
@@ -138,17 +146,13 @@ int main(void)
         break;
     }
 */
-    if (sleep == 0) {
-      // Stay awake, can use "sleep mode" to save power, will wake on interrupt.
-      // disabled below for debugging more complex sleep modes.
-      // HAL_PWR_EnterSLEEPMode(PWR_MAINREGULATOR_ON, PWR_SLEEPENTRY_WFI);
-    } else {
-      PowerDown(sleep);
-    }
+
+    CDC_Transmit_FS(txBuffer, sizeof(txBuffer));
+    HAL_Delay(1000);
+    PowerDown(sleep);
   }
   /* USER CODE END 3 */
 }
-
 
 /**
   * @brief System Clock Configuration
@@ -198,6 +202,9 @@ void SystemClock_Config(void)
 
 void PowerDown(uint8_t level) {
   switch (level) {
+    case 0:
+      HAL_PWR_EnterSLEEPMode(PWR_MAINREGULATOR_ON, PWR_SLEEPENTRY_WFI);
+      break;
     case 1:
       HAL_PWR_DisableWakeUpPin(PWR_WAKEUP_PIN1);
       __HAL_PWR_CLEAR_FLAG(PWR_FLAG_WU);
@@ -208,7 +215,6 @@ void PowerDown(uint8_t level) {
       HAL_GPIO_WritePin(SHUTDOWN_GPIO_Port, SHUTDOWN_Pin, GPIO_PIN_SET);
       break;
     default:
-      // HAL_PWR_EnterSLEEPMode(PWR_MAINREGULATOR_ON, PWR_SLEEPENTRY_WFI);
       break;
   }
 }
@@ -217,6 +223,9 @@ uint8_t Button(void) {
   return HAL_GPIO_ReadPin(BUTTON_GPIO_Port, BUTTON_Pin);
 }
 
+void USBD_CDC_RxHandler(uint8_t *rxBuffer, uint32_t *len) {
+  // deal with received data here...
+}
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
