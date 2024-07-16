@@ -230,20 +230,11 @@ void USBD_CDC_RxHandler(uint8_t *rxBuffer, uint32_t *len) {
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   static uint16_t button_counter = 0;
-  static uint8_t led_counter = 0;
+  static uint32_t blink_sequence[] = {3, 5, 7, 0, PAUSE, END_OF_SEQUENCE};
 
   // Check which version of the timer triggered this callback and toggle LED
   if (htim == &htim16) {
-    /*
-    led_counter++;
-    led_counter %= 100;
-    if (led_counter == 0) {
-      Led(ON);
-    } else {
-      Led(OFF);
-    }
-    */
-    Led_Blink();
+    Led_Blink(blink_sequence);
 
     if (Button()) {
       button_counter++;

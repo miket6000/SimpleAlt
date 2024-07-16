@@ -1,12 +1,7 @@
 #include "led.h"
 #include "gpio.h"
-#define BLINK_OFF_TIME 17
-#define MAX_SEQUENCE_LEN 10
-#define SHORT_PAUSE 10
-#define PAUSE 11
-#define END_OF_SEQUENCE 0xFF
-#define MAX_INDEX (32 / 2 - 1)
 
+#define MAX_INDEX (32 / 2 - 1)
 
 void Led(led_state_t state) {
   switch (state) {
@@ -22,7 +17,6 @@ void Led(led_state_t state) {
   }
 }
 
-uint32_t blink_sequence[] = {3, 5, 7, 0, PAUSE, END_OF_SEQUENCE};
 uint8_t sequence_index = 0;
 uint8_t blink_index = 0;
 uint8_t blink_off_counter = BLINK_OFF_TIME;
@@ -48,12 +42,12 @@ uint32_t codes[] = {
   0xAAAAAAAA  //PAUSE
 };
 
-void Led_Blink() {
+void Led_Blink(uint32_t *sequence) {
   uint32_t code;
   uint8_t blink;
 
   if (blink_off_counter == 0) {
-    code = codes[blink_sequence[sequence_index]];
+    code = codes[sequence[sequence_index]];
     blink = (code >> (2 * blink_index)) & 0x00000003;
     
     if (blink & 0x01) {
@@ -65,7 +59,7 @@ void Led_Blink() {
     } else {
       blink_index = 0;
       sequence_index++;
-      if (sequence_index > MAX_SEQUENCE_LEN || blink_sequence[sequence_index] == END_OF_SEQUENCE) {
+      if (sequence_index > MAX_SEQUENCE_LEN || sequence[sequence_index] == END_OF_SEQUENCE) {
         sequence_index = 0;
       }
     }
