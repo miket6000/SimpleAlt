@@ -234,6 +234,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 
   // Check which version of the timer triggered this callback and toggle LED
   if (htim == &htim16) {
+    /*
     led_counter++;
     led_counter %= 100;
     if (led_counter == 0) {
@@ -241,7 +242,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     } else {
       Led(OFF);
     }
-
+    */
+    Led_Blink();
 
     if (Button()) {
       button_counter++;

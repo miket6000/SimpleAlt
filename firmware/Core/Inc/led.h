@@ -8,5 +8,5 @@ typedef enum {
 } led_state_t;
 
 void Led(led_state_t state);
-
+void Led_Blink(void);
 #endif
