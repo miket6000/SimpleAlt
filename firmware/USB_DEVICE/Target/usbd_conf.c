@@ -47,6 +47,8 @@ void Error_Handler(void);
 
 /* USER CODE BEGIN PFP */
 /* Private function prototypes -----------------------------------------------*/
+extern void USB_Connect(void);
+extern void USB_Disconnect(void);
 
 /* USER CODE END PFP */
 
@@ -203,6 +205,7 @@ void HAL_PCD_SuspendCallback(PCD_HandleTypeDef *hpcd)
     /* Set SLEEPDEEP bit and SleepOnExit of Cortex System Control Register. */
     SCB->SCR |= (uint32_t)((uint32_t)(SCB_SCR_SLEEPDEEP_Msk | SCB_SCR_SLEEPONEXIT_Msk));
   }
+  USB_Disconnect();
   /* USER CODE END 2 */
 }
 
@@ -224,7 +227,8 @@ void HAL_PCD_ResumeCallback(PCD_HandleTypeDef *hpcd)
     /* Reset SLEEPDEEP bit of Cortex System Control Register. */
     SCB->SCR &= (uint32_t)~((uint32_t)(SCB_SCR_SLEEPDEEP_Msk | SCB_SCR_SLEEPONEXIT_Msk));
     SystemClockConfig_Resume();
-  }
+  } 
+  USB_Connect();
   /* USER CODE END 3 */
   USBD_LL_Resume((USBD_HandleTypeDef*)hpcd->pData);
 }

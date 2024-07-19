@@ -28,6 +28,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "led.h"
+//#include "util.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -51,14 +53,23 @@
 uint8_t sleep = 0;
 extern uint8_t UserRxBufferFS[APP_RX_DATA_SIZE];
 extern uint8_t UserTxBufferFS[APP_TX_DATA_SIZE];
+extern USBD_HandleTypeDef hUsbDeviceFS;
+int8_t idle_sequence[] = {1, PAUSE, -2};
+int8_t usb_sequence[] = {2, SHORT_PAUSE, -2};
+int8_t voltage_sequence[] = {1, 2, 3, PAUSE, -1};
+int8_t altitude_sequence[] = {3, 5, 7, 0, PAUSE, -1};
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
+
 /* USER CODE BEGIN PFP */
 void PowerDown(uint8_t level);
 uint8_t Button(void);
-void USBD_CDC_RxHandler(uint8_t *rxBuffer, uint32_t *len);
+void USBD_CDC_RxHandler(uint8_t *rxBuffer, uint32_t len);
+void USB_Connect(void);
+void USB_Disconnect(void);
 
 /* USER CODE END PFP */
 
@@ -75,7 +86,8 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-  uint8_t txBuffer[] = "Hello World\n\r";
+  uint8_t txBuffer[] = "Voltage:            \n\r";
+  uint16_t voltage = 0;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -109,13 +121,33 @@ int main(void)
   HAL_GPIO_WritePin(BMP_CS_GPIO_Port, BMP_CS_Pin, GPIO_PIN_SET);
   HAL_GPIO_WritePin(FLASH_CS_GPIO_Port, FLASH_CS_Pin, GPIO_PIN_SET);
   HAL_GPIO_WritePin(nSENSE_EN_GPIO_Port, nSENSE_EN_Pin, GPIO_PIN_SET);
+  
+  // Calibrate The ADC On Power-Up For Better Accuracy
+  //HAL_ADCEx_Calibration_Start(&hadc);
+  
+  /* Measure Voltage */
+  // Start ADC Conversion
+  HAL_ADC_Start(&hadc);
+  // Poll ADC1 Perihperal & TimeOut = 1mSec
+  HAL_ADC_PollForConversion(&hadc, 5);
+  // Read adc and convert to mV (adc / 2^12 * 3.1 * 2 * 1000)
+  HAL_GPIO_WritePin(nSENSE_EN_GPIO_Port, nSENSE_EN_Pin, GPIO_PIN_RESET);
+  HAL_Delay(100);
+  voltage = HAL_ADC_GetValue(&hadc);// * 6200 / 4096;
+  //HAL_GPIO_WritePin(nSENSE_EN_GPIO_Port, nSENSE_EN_Pin, GPIO_PIN_SET);
+
+  itoa(voltage, (char *)&txBuffer[9], 10); 
+  CDC_Transmit_FS(txBuffer, sizeof(txBuffer));
 
   /* Enable timer interrupt for LED and button timing */
   HAL_TIM_Base_Start_IT(&htim16);
 
-  /* nott 100% sure this is still needed, part of debugging sleep behaviour
-   * try removing. */
-  //HAL_PWR_DisableWakeUpPin(PWR_WAKEUP_PIN1);
+  // flash out the voltage
+  Led_Sequence(voltage_sequence);
+  // and the last altitude
+  Led_Sequence(altitude_sequence);
+  // and got to idle blink
+  Led_Sequence(idle_sequence);
 
   /* USER CODE END 2 */
 
@@ -146,10 +178,13 @@ int main(void)
         break;
     }
 */
-
-    CDC_Transmit_FS(txBuffer, sizeof(txBuffer));
-    HAL_Delay(1000);
-    PowerDown(sleep);
+    /* If USB is connected do transmit loop, otherwise sleep */
+    if(hUsbDeviceFS.dev_state == USBD_STATE_CONFIGURED) {
+      CDC_Transmit_FS(txBuffer, sizeof(txBuffer));
+      HAL_Delay(1000);
+    } else {
+      PowerDown(sleep);
+    }
   }
   /* USER CODE END 3 */
 }
@@ -223,18 +258,25 @@ uint8_t Button(void) {
   return HAL_GPIO_ReadPin(BUTTON_GPIO_Port, BUTTON_Pin);
 }
 
-void USBD_CDC_RxHandler(uint8_t *rxBuffer, uint32_t *len) {
+void USBD_CDC_RxHandler(uint8_t *rxBuffer, uint32_t len) {
   // deal with received data here...
+}
+
+void USB_Connect(void) {
+  //Led_Sequence(usb_sequence);
+}
+
+void USB_Disconnect(void) {
+  //Led_Sequence(idle_sequence);
 }
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   static uint16_t button_counter = 0;
-  static uint32_t blink_sequence[] = {3, 5, 7, 0, PAUSE, END_OF_SEQUENCE};
 
   // Check which version of the timer triggered this callback and toggle LED
   if (htim == &htim16) {
-    Led_Blink(blink_sequence);
+    Led_Blink();
 
     if (Button()) {
       button_counter++;
