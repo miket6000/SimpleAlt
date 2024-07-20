@@ -36,7 +36,7 @@ uint32_t codes[] = {
 
 void step_sequencer(void);
 
-void Led(led_state_t state) {
+void set_led(LedState state) {
   switch (state) {
     case ON:
       HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
@@ -50,7 +50,7 @@ void Led(led_state_t state) {
   }
 }
 
-void Led_Sequence(int8_t *new_sequence) {
+void add_led_sequence(int8_t *new_sequence) {
   uint8_t i = 0;
 
   while (new_sequence[i] >= 0) {
@@ -62,16 +62,16 @@ void Led_Sequence(int8_t *new_sequence) {
   sequence[sequence_head] = new_sequence[i];
 }
 
-void Led_Blink() {
+void blink(void) {
   uint8_t blink;
 
   if (blink_off_counter == 0) {
     blink = (codes[sequence[sequence_index]] >> (2 * blink_index)) & 0x00000003;
     
     if (blink & LED_MASK) {
-      Led(ON);
+      set_led(ON);
     } else {
-      Led(OFF);
+      set_led(OFF);
     } 
 
     if ((blink & VALID_MASK) && (blink_index <= MAX_BLINK)) {
@@ -83,7 +83,7 @@ void Led_Blink() {
     
     blink_off_counter = BLINK_OFF_TIME;
   } else {
-    Led(OFF);
+    set_led(OFF);
     blink_off_counter--;
   }
 }

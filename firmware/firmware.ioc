@@ -68,6 +68,7 @@ Mcu.UserConstants=
 Mcu.UserName=STM32F042G6Ux
 MxCube.Version=6.11.1
 MxDb.Version=DB.6.0.111
+NVIC.ADC1_IRQn=true\:0\:0\:false\:false\:true\:true\:true\:true
 NVIC.DMA1_Channel2_3_IRQn=true\:0\:0\:false\:false\:true\:false\:true\:true
 NVIC.ForceEnableDMAVector=true
 NVIC.HardFault_IRQn=true\:0\:0\:false\:false\:true\:false\:false\:false
