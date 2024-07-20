@@ -147,7 +147,6 @@ C_INCLUDES =  \
 -IDrivers/CMSIS/Include \
 -IMiddlewares/ST/STM32_USB_Device_Library/Class/CDC/Inc
 
-
 # compile gcc flags
 ASFLAGS = $(MCU) $(AS_DEFS) $(AS_INCLUDES) $(OPT) -Wall -fdata-sections -ffunction-sections
 
@@ -216,8 +215,34 @@ $(BUILD_DIR):
 clean:
 	-rm -fR $(BUILD_DIR)
 
+#######################################
+# Support tools
+#######################################
 program: $(BUILD_DIR)/$(TARGET).bin | $(BUILD_DIR)
 	dfu-util -a 0 -D $(BUILD_DIR)/$(TARGET).bin -s 0x08000000
+
+
+debug_fancy:
+	tmux split -h sudo openocd -f interface/jlink.cfg -c 'transport select swd' -f target/stm32f0x.cfg & 
+	gdb-multiarch build/firmware.elf -ex 'target extended-remote :3333'
+
+debug:
+	openocd -f interface/jlink.cfg -c 'transport select swd' -f target/stm32f0x.cfg & 
+	gdb-multiarch build/firmware.elf -ex 'target extended-remote :3333'
+
+
+serial_log:
+	mkdir -p logs
+	python3 -m serial /dev/ttyACM0 --raw |tee logs/serial_$$(date "+%Y%m%d_%H%M%S")
+
+setup:
+	sudo apt install dfu-util \
+        build-essential \
+        gcc-arm-none-eabi \
+        binutils-arm-none-eabi \
+        python3-serial \
+        openocd \
+        gdb-multiarch
 
 #######################################
 # dependencies
