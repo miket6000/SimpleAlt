@@ -30,7 +30,8 @@
 #include "led.h"
 #include "power.h"
 #include "usbd_cdc_if.h"
-//#include "util.h"
+#include "spi_wrapper.h"
+#include "bmp280.h"
 
 /* USER CODE END Includes */
 
@@ -85,7 +86,9 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-  uint8_t txBuffer[] = "Voltage:            \n\r";
+  uint8_t txBuffer[] = "Voltage:     , Temp:     , Pressure:         \n\r";
+  int32_t temperature = 0;
+  uint32_t pressure = 0;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -119,6 +122,8 @@ int main(void)
   HAL_GPIO_WritePin(BMP_CS_GPIO_Port, BMP_CS_Pin, GPIO_PIN_SET);
   HAL_GPIO_WritePin(FLASH_CS_GPIO_Port, FLASH_CS_Pin, GPIO_PIN_SET);
   HAL_GPIO_WritePin(nSENSE_EN_GPIO_Port, nSENSE_EN_Pin, GPIO_PIN_SET);
+  
+  bmp_init(BMP_CS_GPIO_Port, BMP_CS_Pin);
   
   // Calibrate The ADC On Power-Up For Better Accuracy
   HAL_ADCEx_Calibration_Start(&hadc);
@@ -163,9 +168,12 @@ int main(void)
     }
 */
 
+
      /* If USB is connected do transmit loop, otherwise sleep */
     if(hUsbDeviceFS.dev_state == USBD_STATE_CONFIGURED) {
       itoa(get_battery_voltage(), (char *)&txBuffer[9], 10); 
+      itoa(bmp_get_temperature(), (char *)&txBuffer[21], 10); 
+      itoa(bmp_get_pressure(), (char *)&txBuffer[37], 10);      
       CDC_Transmit_FS(txBuffer, sizeof(txBuffer));
       HAL_Delay(1000);
     } else {

@@ -1,41 +1,169 @@
 #include "bmp280.h"
 #include "gpio.h"
+#include "spi_wrapper.h"
+#include <stdint.h>
 
-typdef enum (
-  ID = 0xD0,
-  RESET = 0xE0,
-  STATUS = 0xF3,
-  CTRL_MEAS = 0xF4,
-  CONFIG = 0xF5,
-  PRES_MSB = 0xF7,
-  PRES_LSB = 0xF8,
-  PRES_XLSB = 0xF9,
-  TEMP_MSB = 0xFA,
-  TEMP_LSB = 0xFB,
-  TEMP_XLSB = 0xFC,
-  CALIB00 = 0x88
-) bmp_280_register_t;
+CSPin bmp_cs;
 
-uint8_t spiRxBuffer[26];
-uint8_t spiTxBuffer[2];
-    
-void BMP280_InitiateTransfer(uint8_t rx_len) {
-  HAL_GPIO_WritePin(BMP280_CS_Port, BMP280_CS_Pin, GPIO_PIN_RESET);
-}
+typedef enum {
+  BMP_ID = 0xD0,
+  BMP_RESET = 0xE0,
+  BMP_STATUS = 0xF3,
+  BMP_CTRL_MEAS = 0xF4,
+  BMP_CONFIG = 0xF5,
+  BMP_PRES_MSB = 0xF7,
+  BMP_PRES_LSB = 0xF8,
+  BMP_PRES_XLSB = 0xF9,
+  BMP_TEMP_MSB = 0xFA,
+  BMP_TEMP_LSB = 0xFB,
+  BMP_TEMP_XLSB = 0xFC,
+  BMP_CALIB00 = 0x88
+} BMP280Register;
 
+typedef struct {
+  uint16_t dig_T1;
+  int16_t dig_T2;
+  int16_t dig_T3;
+  uint16_t dig_P1;
+  int16_t dig_P2;
+  int16_t dig_P3;
+  int16_t dig_P4;
+  int16_t dig_P5;
+  int16_t dig_P6;
+  int16_t dig_P7;
+  int16_t dig_P8;
+  int16_t dig_P9;
+} BMPCalibrationData;
 
+typedef struct {
+  uint8_t output_data_rate;
+  uint8_t filter;
+  uint8_t spi;
+  uint8_t temp_oversample;
+  uint8_t pressure_oversample;
+  uint8_t power_mode;
+} BMPConfig;
 
-void BMP280_CompleteTransfer() {
-  HAL_GPIO_WritePin(BMP280_CS_Port, BMP280_CS_Pin, GPIO_PIN_SET);
-}
+BMPCalibrationData cal;
+BMPConfig config;
 
-void BMP280_SetupTransfer(uint8_t *tx_buffer, uint8_t* rx_buffer,  uint8_t rx_bytes) {
+uint8_t spi_rx_buffer[26];
+
+void bmp_get_calibration(void);
+void bmp_config(void);
+static int32_t bmp280_compensate_T_int32(int32_t adc_T);
+static uint32_t bmp280_compensate_P_int32(int32_t adc_P);
+
+void bmp_init(GPIO_TypeDef *port, uint16_t pin) {
+  bmp_cs.port = port;
+  bmp_cs.pin = pin;
   
+  config.output_data_rate = 0x00;     // 0.5ms between samples
+  config.filter = 0x01;               // 2 samples to reach >75% step response
+  config.spi = 0x00;                  // use 4-wire mode
+  config.temp_oversample = 0x01;      // 0x01 = 1x temperature oversampling
+  config.pressure_oversample = 0x04;  // 0x04 = 8x pressure oversampling.
+  config.power_mode = 0x03;           // 0x03 = normal mode
+  
+  //HAL_SPI_Transmit_DMA(&hspi1, spi_tx_buffer, SPI_BUFFER_SIZE);
+  //HAL_SPI_Receive_DMA(&hspi1, spi_rx_buffer, SPI_BUFFER_SIZE);
+  
+  //spi_read_address(bmp_cs, BMP_ID, spi_rx_buffer, 1);
+  bmp_get_calibration();  
+  bmp_config();
+}
+	
+void bmp_config(void) {
+  uint8_t _config, _ctrl_meas;
+  _config = (config.output_data_rate << 5) |
+            (config.filter << 2) |
+            (config.spi);
+  _ctrl_meas =  (config.temp_oversample << 5) | 
+                (config.pressure_oversample << 2) | 
+                (config.power_mode);
+  spi_write_address(bmp_cs, BMP_CONFIG & ~0x80, &_config, 1);
+  spi_write_address(bmp_cs, BMP_CTRL_MEAS & ~0x80, &_ctrl_meas, 1);  
+}
+
+int32_t bmp_get_temperature(void) {
+  spi_read_address(bmp_cs, BMP_TEMP_MSB, spi_rx_buffer, 3);
+  uint32_t uncompensated_temp = (uint32_t)(spi_rx_buffer[0] << 12) | 
+                                (uint32_t)(spi_rx_buffer[1] << 4) | 
+                                (uint32_t)(spi_rx_buffer[2] >> 4); 
+  int32_t temperature = bmp280_compensate_T_int32(uncompensated_temp);
+  return temperature;
+}
+
+uint32_t bmp_get_pressure(void) {
+  spi_read_address(bmp_cs, BMP_PRES_MSB, spi_rx_buffer, 3);
+  uint32_t uncompensated_pressure = (uint32_t)(spi_rx_buffer[0] << 12) | 
+                                    (uint32_t)(spi_rx_buffer[1] << 4) | 
+                                    (uint32_t)(spi_rx_buffer[2] >> 4); 
+  uint32_t pressure = bmp280_compensate_P_int32(uncompensated_pressure);
+  return pressure;
 }
 
 
-void BMP280_Init() {
-
+void bmp_get_calibration(void) {	
+  spi_read_address(bmp_cs, BMP_CALIB00, spi_rx_buffer, 24);
+  cal.dig_T1 = ((uint16_t)spi_rx_buffer[1] << 8) | spi_rx_buffer[0];
+  cal.dig_T2 = ((int16_t)spi_rx_buffer[3] << 8) | spi_rx_buffer[2];
+  cal.dig_T3 = ((int16_t)spi_rx_buffer[5] << 8) | spi_rx_buffer[4];
+  cal.dig_P1 = ((uint16_t)spi_rx_buffer[7] << 8) | spi_rx_buffer[6];
+  cal.dig_P2 = ((int16_t)spi_rx_buffer[9] << 8) | spi_rx_buffer[8];
+  cal.dig_P3 = ((int16_t)spi_rx_buffer[11] << 8) | spi_rx_buffer[10];
+  cal.dig_P4 = ((int16_t)spi_rx_buffer[13] << 8) | spi_rx_buffer[12];
+  cal.dig_P5 = ((int16_t)spi_rx_buffer[15] << 8) | spi_rx_buffer[14];
+  cal.dig_P6 = ((int16_t)spi_rx_buffer[17] << 8) | spi_rx_buffer[16];
+  cal.dig_P7 = ((int16_t)spi_rx_buffer[19] << 8) | spi_rx_buffer[18];
+  cal.dig_P8 = ((int16_t)spi_rx_buffer[21] << 8) | spi_rx_buffer[20];
+  cal.dig_P9 = ((int16_t)spi_rx_buffer[23] << 8) | spi_rx_buffer[22];
 }
 
+// START: from Bosch Sensortec BMP280 Data sheet : BST-BMP280-DS001-26 Revision_1.26_102021
+// ------>8-------------------------------------------------------------------------
+// Returns temperature in DegC, resolution is 0.01 DegC. Output value of “5123” equals 51.23 DegC.
+// t_fine carries fine temperature as global value
+int32_t t_fine;
+static int32_t bmp280_compensate_T_int32(int32_t adc_T)
+{
+    int32_t var1, var2, T;
+    var1 = ((((adc_T>>3) - ((int32_t)cal.dig_T1<<1))) * ((int32_t)cal.dig_T2)) >> 11;
+    var2 = (((((adc_T>>4) - ((int32_t)cal.dig_T1)) * ((adc_T>>4) - ((int32_t)cal.dig_T1))) >> 12) *
+            ((int32_t)cal.dig_T3)) >> 14;
+    t_fine = var1 + var2;
+    T = (t_fine * 5 + 128) >> 8;
+    return T;
+}
 
+// Returns pressure in Pa as unsigned 32 bit integer. Output value of “96386” equals 96386 Pa = 963.86 hPa
+static uint32_t bmp280_compensate_P_int32(int32_t adc_P)
+{
+    int32_t var1, var2;
+    uint32_t p;
+    var1 = (((int32_t)t_fine)>>1) - (int32_t)64000;
+    var2 = (((var1>>2) * (var1>>2)) >> 11 ) * ((int32_t)cal.dig_P6);
+    var2 = var2 + ((var1*((int32_t)cal.dig_P5))<<1);
+    var2 = (var2>>2)+(((int32_t)cal.dig_P4)<<16);
+    var1 = (((cal.dig_P3 * (((var1>>2) * (var1>>2)) >> 13 )) >> 3) + ((((int32_t)cal.dig_P2) * var1)>>1))>>18;
+    var1 =((((32768+var1))*((int32_t)cal.dig_P1))>>15);
+    if (var1 == 0)
+    {
+        return 0; // avoid exception caused by division by zero
+    }
+    p = (((uint32_t)(((int32_t)1048576)-adc_P)-(var2>>12)))*3125;
+    if (p < 0x80000000)
+    {
+        p = (p << 1) / ((uint32_t)var1);
+    }
+    else
+    {
+        p = (p / (uint32_t)var1) * 2;
+    }
+    var1 = (((int32_t)cal.dig_P9) * ((int32_t)(((p>>3) * (p>>3))>>13)))>>12;
+    var2 = (((int32_t)(p>>2)) * ((int32_t)cal.dig_P8))>>13;
+    p = (uint32_t)((int32_t)p + ((var1 + var2 + cal.dig_P7) >> 4));
+    return p;
+}
+// ------>8-------------------------------------------------------------------------
+// END: from Bosch Sensortec BMP280 Data sheet : BST-BMP280-DS001-26 Revision_1.26_102021
