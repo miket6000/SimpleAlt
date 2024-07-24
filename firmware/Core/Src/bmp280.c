@@ -2,85 +2,36 @@
 #include "gpio.h"
 #include "spi_wrapper.h"
 #include <stdint.h>
+#include "altitude.h"
 
+/* Globals */
+const uint32_t standard_pressure = 101325;
 CSPin bmp_cs;
-
-typedef enum {
-  BMP_ID = 0xD0,
-  BMP_RESET = 0xE0,
-  BMP_STATUS = 0xF3,
-  BMP_CTRL_MEAS = 0xF4,
-  BMP_CONFIG = 0xF5,
-  BMP_PRES_MSB = 0xF7,
-  BMP_PRES_LSB = 0xF8,
-  BMP_PRES_XLSB = 0xF9,
-  BMP_TEMP_MSB = 0xFA,
-  BMP_TEMP_LSB = 0xFB,
-  BMP_TEMP_XLSB = 0xFC,
-  BMP_CALIB00 = 0x88
-} BMP280Register;
-
-typedef struct {
-  uint16_t dig_T1;
-  int16_t dig_T2;
-  int16_t dig_T3;
-  uint16_t dig_P1;
-  int16_t dig_P2;
-  int16_t dig_P3;
-  int16_t dig_P4;
-  int16_t dig_P5;
-  int16_t dig_P6;
-  int16_t dig_P7;
-  int16_t dig_P8;
-  int16_t dig_P9;
-} BMPCalibrationData;
-
-typedef struct {
-  uint8_t output_data_rate;
-  uint8_t filter;
-  uint8_t spi;
-  uint8_t temp_oversample;
-  uint8_t pressure_oversample;
-  uint8_t power_mode;
-} BMPConfig;
-
 BMPCalibrationData cal;
-BMPConfig config;
-
+uint32_t pressure;
+uint32_t temperature;
+uint32_t altitude;
+uint16_t velocity;
 uint8_t spi_rx_buffer[26];
 
+/* Private functions prototypes */
 void bmp_get_calibration(void);
-void bmp_config(void);
 static int32_t bmp280_compensate_T_int32(int32_t adc_T);
 static uint32_t bmp280_compensate_P_int32(int32_t adc_P);
 
+/* Function definitions */
 void bmp_init(GPIO_TypeDef *port, uint16_t pin) {
+  uint8_t _config = BMP_ODR << 5 | BMP_FILTER << 2 | BMP_SPI;
+  uint8_t _ctrl_meas = BMP_TEMP_OS << 5 | BMP_PRES_OS << 2 | BMP_POWER_MODE;
+  
   bmp_cs.port = port;
   bmp_cs.pin = pin;
-  
-  config.output_data_rate = 0x00;     // 0.5ms between samples
-  config.filter = 0x01;               // 2 samples to reach >75% step response
-  config.spi = 0x00;                  // use 4-wire mode
-  config.temp_oversample = 0x01;      // 0x01 = 1x temperature oversampling
-  config.pressure_oversample = 0x04;  // 0x04 = 8x pressure oversampling.
-  config.power_mode = 0x03;           // 0x03 = normal mode
-  
+
   //HAL_SPI_Transmit_DMA(&hspi1, spi_tx_buffer, SPI_BUFFER_SIZE);
   //HAL_SPI_Receive_DMA(&hspi1, spi_rx_buffer, SPI_BUFFER_SIZE);
   
-  //spi_read_address(bmp_cs, BMP_ID, spi_rx_buffer, 1);
   bmp_get_calibration();  
-  bmp_config();
-}
-	
-void bmp_config(void) {
-  uint8_t _config, _ctrl_meas;
-  _config = (config.output_data_rate << 5) |
-            (config.filter << 2) |
-            (config.spi);
-  _ctrl_meas =  (config.temp_oversample << 5) | 
-                (config.pressure_oversample << 2) | 
-                (config.power_mode);
+
   spi_write_address(bmp_cs, BMP_CONFIG & ~0x80, &_config, 1);
   spi_write_address(bmp_cs, BMP_CTRL_MEAS & ~0x80, &_ctrl_meas, 1);  
 }
@@ -90,7 +41,7 @@ int32_t bmp_get_temperature(void) {
   uint32_t uncompensated_temp = (uint32_t)(spi_rx_buffer[0] << 12) | 
                                 (uint32_t)(spi_rx_buffer[1] << 4) | 
                                 (uint32_t)(spi_rx_buffer[2] >> 4); 
-  int32_t temperature = bmp280_compensate_T_int32(uncompensated_temp);
+  temperature = bmp280_compensate_T_int32(uncompensated_temp);
   return temperature;
 }
 
@@ -99,10 +50,16 @@ uint32_t bmp_get_pressure(void) {
   uint32_t uncompensated_pressure = (uint32_t)(spi_rx_buffer[0] << 12) | 
                                     (uint32_t)(spi_rx_buffer[1] << 4) | 
                                     (uint32_t)(spi_rx_buffer[2] >> 4); 
-  uint32_t pressure = bmp280_compensate_P_int32(uncompensated_pressure);
+  pressure = bmp280_compensate_P_int32(uncompensated_pressure);
   return pressure;
 }
 
+uint32_t bmp_get_altitude(void) {
+  uint8_t n = (MAX_PRESSURE - pressure) / PRESSURE_STEP;
+  uint16_t f = (MAX_PRESSURE - pressure) % PRESSURE_STEP;
+  altitude = altitude_lut[n] + f * (altitude_lut[n+1] - altitude_lut[n]) / PRESSURE_STEP;  
+  return altitude;
+}
 
 void bmp_get_calibration(void) {	
   spi_read_address(bmp_cs, BMP_CALIB00, spi_rx_buffer, 24);

@@ -86,9 +86,14 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-  uint8_t txBuffer[] = "Voltage:     , Temp:     , Pressure:         \n\r";
+  uint8_t txBuffer[] = "V:     , T:     , P:       , A:      \n\r";
   int32_t temperature = 0;
   uint32_t pressure = 0;
+  int32_t altitude = 0;
+  int16_t voltage = 0;
+  int16_t velocity = 0;
+
+
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -168,12 +173,18 @@ int main(void)
     }
 */
 
+    voltage = get_battery_voltage();
+    temperature = bmp_get_temperature();
+    pressure = bmp_get_pressure();
+    altitude = bmp_get_altitude();
+
 
      /* If USB is connected do transmit loop, otherwise sleep */
     if(hUsbDeviceFS.dev_state == USBD_STATE_CONFIGURED) {
-      itoa(get_battery_voltage(), (char *)&txBuffer[9], 10); 
-      itoa(bmp_get_temperature(), (char *)&txBuffer[21], 10); 
-      itoa(bmp_get_pressure(), (char *)&txBuffer[37], 10);      
+      itoa(voltage, (char *)&txBuffer[3], 10); 
+      itoa(temperature, (char *)&txBuffer[12], 10); 
+      itoa(pressure, (char *)&txBuffer[21], 10);      
+      itoa(altitude, (char *)&txBuffer[32], 10);
       CDC_Transmit_FS(txBuffer, sizeof(txBuffer));
       HAL_Delay(1000);
     } else {
