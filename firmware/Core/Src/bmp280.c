@@ -57,7 +57,9 @@ uint32_t bmp_get_pressure(void) {
 uint32_t bmp_get_altitude(void) {
   uint8_t n = (MAX_PRESSURE - pressure) / PRESSURE_STEP;
   uint16_t f = (MAX_PRESSURE - pressure) % PRESSURE_STEP;
-  altitude = altitude_lut[n] + f * (altitude_lut[n+1] - altitude_lut[n]) / PRESSURE_STEP;  
+  if (pressure <= MAX_PRESSURE && pressure >= MIN_PRESSURE) {
+    altitude = altitude_lut[n] + f * (altitude_lut[n+1] - altitude_lut[n]) / PRESSURE_STEP;
+  };
   return altitude;
 }
 

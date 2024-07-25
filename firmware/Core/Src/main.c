@@ -86,12 +86,11 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-  uint8_t txBuffer[] = "V:     , T:     , P:       , A:      \n\r";
+  uint8_t txBuffer[] = "V:       T:       P:         A:        \n\r";
   int32_t temperature = 0;
   uint32_t pressure = 0;
   int32_t altitude = 0;
   int16_t voltage = 0;
-  int16_t velocity = 0;
 
 
   /* USER CODE END 1 */
