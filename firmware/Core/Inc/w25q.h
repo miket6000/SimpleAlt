@@ -11,5 +11,6 @@ uint8_t w25q_init(GPIO_TypeDef *port, uint16_t pin);
 void w25q_write_enable(void);
 void w25q_write(uint32_t address, uint8_t *tx_buffer, uint16_t len);
 void w25q_read(uint32_t address, uint8_t *rx_buffer, uint16_t len);
+void w25q_erase_chip(void);
 void w25q_power(uint8_t state);
 #endif //W25Q_H

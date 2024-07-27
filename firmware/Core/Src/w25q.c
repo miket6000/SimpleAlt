@@ -22,6 +22,11 @@ void w25q_write_enable(void) {
   spi_write_address(flash_cs, 0x06, &write_enable, 1); 
 }
 
+void w25q_erase_chip() {
+  w25q_write_enable();
+  spi_write_byte(flash_cs, 0xC7);
+}
+
 void w25q_write(uint32_t address, uint8_t *tx_buffer, uint16_t len) {
   address &= 0x00FFFFFF; // SPI only has a 24 bit address space
   address |= 0x03000000; // upper byte is command, 0x03 = read.

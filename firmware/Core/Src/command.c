@@ -3,7 +3,6 @@
 #include <string.h>
 #include <stdio.h>
 #include <ctype.h>
-#include "stm32f0xx_hal.h"
 
 #define RX_BUFFER_LEN 32U
 #define TERM_CHAR '\n'
@@ -16,14 +15,26 @@ static char *last;
 static char *token;
 static uint8_t num_commands = 0;
 static Command commands[MAX_NUM_COMMANDS];
-char prompt[] = "\n> ";
-char no_match[] = "\n  Command not recognised.";
+static char prompt[] = "\n> ";
+static char no_match[] = "Command not recognised.";
+static char eol[] = "\n";
 bool interactive = true;
 
-void (*cmd_print)(char *str, uint16_t len);
+void (*print_function)(char *str, uint16_t len);
+
+void cmd_print(char *buffer, uint16_t len) {
+  if (interactive) {
+    print_function(buffer, len);
+  }
+}
 
 void cmd_set_print_function(void (*function)(char*,uint16_t)) {
-  cmd_print = function;
+  print_function = function;
+  cmd_print(prompt, sizeof(prompt));
+}
+
+char *cmd_get_param() {
+  return strtok_r(NULL, DELIM, &last); 
 }
 
 void cmd_clear_buffer() {
@@ -31,9 +42,7 @@ void cmd_clear_buffer() {
     rx_buffer[i] = '\0';
   }
   buffer_index = 0;
-  if (interactive) {
-    cmd_print(prompt, sizeof(prompt));
-  }
+  cmd_print(prompt, sizeof(prompt));
 }
 
 void cmd_add(const char *command, void (*callback)(void)) {
@@ -52,6 +61,7 @@ void cmd_read_input(char *buffer, uint8_t len) {
   for (int i = 0; i < len; i++) {
     inchar = buffer[i];
     if (inchar == TERM_CHAR) {
+      cmd_print(eol, sizeof(eol));
       buffer_index = 0;
       token = strtok_r(rx_buffer, DELIM, &last);
       if (token == NULL) return;
@@ -71,8 +81,9 @@ void cmd_read_input(char *buffer, uint8_t len) {
         cmd_clear_buffer();
       }
     } else if (isprint(inchar)) {
-      cmd_print(&inchar,1);
-      rx_buffer[buffer_index++] = inchar;
+      cmd_print(&inchar,1); //echo printable characters
+      rx_buffer[buffer_index] = inchar;
+      buffer_index++;
       rx_buffer[buffer_index] = '\0';
       if (buffer_index >= RX_BUFFER_LEN) {
         buffer_index = 0;

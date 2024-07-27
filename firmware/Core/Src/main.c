@@ -87,20 +87,21 @@ void led_on() {
 }
 
 void print_pressure() {
-  char buffer[8] = "\n  ";
-  itoa(bmp_get_pressure(), &buffer[3], 10);
+  char buffer[8];
+  itoa(bmp_get_pressure(), buffer, 10);
   print(buffer, strlen(buffer));
 }
 
 void print_altitude() {
-  char buffer[8] = "\n  ";
-  itoa(bmp_get_altitude(), &buffer[3], 10);
+  char buffer[8];
+  itoa(bmp_get_altitude(), buffer, 10);
   print(buffer, strlen(buffer));
 }
 
 void print_temperature() {
-  char buffer[8] = "\n  ";
-  itoa(bmp_get_temperature(), &buffer[3], 10);
+  char buffer[8];
+  char* param = NULL;
+  itoa(bmp_get_temperature(), buffer, 10);
   print(buffer, strlen(buffer));
 }
 
@@ -188,7 +189,8 @@ int main(void)
   cmd_add("P", print_pressure); 
   cmd_add("T", print_temperature); 
   cmd_add("A", print_altitude); 
-  cmd_add("ERASE", w25q_erase);
+  cmd_add("ERASE", w25q_erase_chip);
+  cmd_add("G", bmp_set_ground_level);
   cmd_set_print_function(print);
 
   /* USER CODE END 2 */
