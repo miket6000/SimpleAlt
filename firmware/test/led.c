@@ -1,5 +1,6 @@
 #include "led.h"
 #include "gpio.h"
+#include <stdio.h>
 
 #define MAX_BLINK (32 / 2 - 1)
 #define LED_MASK 0x01
@@ -36,7 +37,7 @@ uint32_t codes[] = {
 
 void step_sequencer(void);
 
-void led(LedState state) {
+void Led(led_state_t state) {
   switch (state) {
     case ON:
       HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
@@ -50,10 +51,11 @@ void led(LedState state) {
   }
 }
 
-void led_add_sequence(int8_t *new_sequence) {
+void Led_Sequence(int8_t *new_sequence) {
   uint8_t i = 0;
 
   while (new_sequence[i] >= 0) {
+    printf("ns[i] = %d", new_sequence[i]);
     sequence[sequence_head] = new_sequence[i];
     sequence_head++;
     sequence_head %= SEQUENCE_LEN;
@@ -62,16 +64,16 @@ void led_add_sequence(int8_t *new_sequence) {
   sequence[sequence_head] = new_sequence[i];
 }
 
-void led_blink(void) {
+void Led_Blink() {
   uint8_t blink;
 
   if (blink_off_counter == 0) {
     blink = (codes[sequence[sequence_index]] >> (2 * blink_index)) & 0x00000003;
     
     if (blink & LED_MASK) {
-      led(ON);
+      Led(ON);
     } else {
-      led(OFF);
+      Led(OFF);
     } 
 
     if ((blink & VALID_MASK) && (blink_index <= MAX_BLINK)) {
@@ -83,7 +85,7 @@ void led_blink(void) {
     
     blink_off_counter = BLINK_OFF_TIME;
   } else {
-    led(OFF);
+    Led(OFF);
     blink_off_counter--;
   }
 }

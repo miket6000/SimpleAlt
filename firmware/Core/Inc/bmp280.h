@@ -7,10 +7,10 @@
  * See BMP280 datasheet for values based on system requirements
  */
 #define BMP_ODR         0x00
-#define BMP_FILTER      0x01
+#define BMP_FILTER      0x02
 #define BMP_SPI         0x00
 #define BMP_TEMP_OS     0x01
-#define BMP_PRES_OS     0x04
+#define BMP_PRES_OS     0x05
 #define BMP_POWER_MODE  0x03
 
 typedef enum {

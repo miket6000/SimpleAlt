@@ -79,6 +79,8 @@ Core/Src/power.c \
 Core/Src/dma.c \
 Core/Src/spi_wrapper.c \
 Core/Src/bmp280.c \
+Core/Src/w25q.c \
+Core/Src/command.c \
 USB_DEVICE/App/usbd_cdc_if.c \
 Middlewares/ST/STM32_USB_Device_Library/Class/CDC/Src/usbd_cdc.c
 
@@ -149,7 +151,6 @@ C_INCLUDES =  \
 -IDrivers/CMSIS/Device/ST/STM32F0xx/Include \
 -IDrivers/CMSIS/Include \
 -IMiddlewares/ST/STM32_USB_Device_Library/Class/CDC/Inc
-
 
 # compile gcc flags
 ASFLAGS = $(MCU) $(AS_DEFS) $(AS_INCLUDES) $(OPT) -Wall -fdata-sections -ffunction-sections

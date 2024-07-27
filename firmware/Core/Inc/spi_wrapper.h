@@ -9,6 +9,9 @@ typedef struct {
 } CSPin;
 
 void spi_read_address(CSPin cs, uint8_t address, uint8_t *rx_buffer, uint8_t len);
+void spi_read_32bit_address(CSPin cs, uint32_t address, uint8_t *rx_buffer, uint8_t len);
+void spi_write_byte(CSPin cs, uint8_t byte);
 void spi_write_address(CSPin cs, uint8_t address, uint8_t *tx_buffer, uint8_t len);
+void spi_write_32bit_address(CSPin cs, uint32_t address, uint8_t *tx_buffer, uint8_t len);
 
 #endif //SPI_WRAPPER_H
