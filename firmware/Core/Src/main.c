@@ -32,6 +32,9 @@
 #include "usbd_cdc_if.h"
 #include "spi_wrapper.h"
 #include "bmp280.h"
+#include "w25q.h"
+#include "command.h"
+
 
 /* USER CODE END Includes */
 
@@ -56,6 +59,8 @@
 uint8_t sleep = SLEEP;
 extern uint8_t UserRxBufferFS[APP_RX_DATA_SIZE];
 extern uint8_t UserTxBufferFS[APP_TX_DATA_SIZE];
+uint16_t tx_buffer_index = 0;
+
 extern USBD_HandleTypeDef hUsbDeviceFS;
 int8_t idle_sequence[] = {1, PAUSE, -2};
 int8_t usb_sequence[] = {2, SHORT_PAUSE, -2};
@@ -71,10 +76,39 @@ uint8_t Button(void);
 void USBD_CDC_RxHandler(uint8_t *rxBuffer, uint32_t len);
 void USB_Connect(void);
 void USB_Disconnect(void);
+void print(char *tx_buffer, uint16_t len);
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+void led_on() {
+  led(ON);
+}
+
+void print_pressure() {
+  char buffer[8];
+  itoa(bmp_get_pressure(), buffer, 10);
+  print(buffer, strlen(buffer));
+}
+
+void print_altitude() {
+  char buffer[8];
+  itoa(bmp_get_altitude(), buffer, 10);
+  print(buffer, strlen(buffer));
+}
+
+void print_temperature() {
+  char buffer[8];
+  char* param = NULL;
+  itoa(bmp_get_temperature(), buffer, 10);
+  print(buffer, strlen(buffer));
+}
+
+void print(char *tx_buffer, uint16_t len) {
+  memcpy(&UserTxBufferFS[tx_buffer_index], tx_buffer, len);
+  tx_buffer_index += len;
+}
 
 /* USER CODE END 0 */
 
@@ -91,6 +125,8 @@ int main(void)
   uint32_t pressure = 0;
   int32_t altitude = 0;
   int16_t voltage = 0;
+
+
 
 
   /* USER CODE END 1 */
@@ -128,7 +164,15 @@ int main(void)
   HAL_GPIO_WritePin(nSENSE_EN_GPIO_Port, nSENSE_EN_Pin, GPIO_PIN_SET);
   
   bmp_init(BMP_CS_GPIO_Port, BMP_CS_Pin);
-  
+  uint8_t mfg_id = w25q_init(FLASH_CS_GPIO_Port, FLASH_CS_Pin);
+
+  /* The below is used to verify that we can talk to the flash chip.
+  uint8_t tmp[] = "SPI:            \n";
+  HAL_Delay(5000);
+  itoa(mfg_id, (char *)&tmp[4],10);
+  CDC_Transmit_FS(tmp, sizeof(txBuffer));
+  */
+
   // Calibrate The ADC On Power-Up For Better Accuracy
   HAL_ADCEx_Calibration_Start(&hadc);
 
@@ -136,60 +180,57 @@ int main(void)
   HAL_TIM_Base_Start_IT(&htim16);
 
   // flash out the voltage
-  add_led_sequence(voltage_sequence);
+  led_add_sequence(voltage_sequence);
   // and the last altitude
-  add_led_sequence(altitude_sequence);
+  led_add_sequence(altitude_sequence);
   // and got to idle blink
-  add_led_sequence(idle_sequence);
+  led_add_sequence(idle_sequence);
+  cmd_add("LED_ON", led_on);
+  cmd_add("P", print_pressure); 
+  cmd_add("T", print_temperature); 
+  cmd_add("A", print_altitude); 
+  cmd_add("ERASE", w25q_erase_chip);
+  cmd_add("G", bmp_set_ground_level);
+  cmd_set_print_function(print);
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+//  uint32_t tick = HAL_GetTick();
   while (1)
   {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-/*  
-    switch (state) {
-      case IDLE:
-        break;
-      case READY:
-        break;
-      case INFLIGHT:
-        break;
-      case LANDED:
-        break;
-      case STANDBY:
-        break;
-      case POWERDOWN:
-        break;
-      case CONNECTED:
-        break;
-      default:
-        break;
-    }
-*/
-
     voltage = get_battery_voltage();
     temperature = bmp_get_temperature();
     pressure = bmp_get_pressure();
     altitude = bmp_get_altitude();
-
-
-     /* If USB is connected do transmit loop, otherwise sleep */
-    if(hUsbDeviceFS.dev_state == USBD_STATE_CONFIGURED) {
-      itoa(voltage, (char *)&txBuffer[3], 10); 
-      itoa(temperature, (char *)&txBuffer[12], 10); 
-      itoa(pressure, (char *)&txBuffer[21], 10);      
-      itoa(altitude, (char *)&txBuffer[32], 10);
-      CDC_Transmit_FS(txBuffer, sizeof(txBuffer));
-      HAL_Delay(1000);
-    } else {
-      // normally pause execution until woken by an interrupt
-      power_down(sleep);
+    if (tx_buffer_index > 0) {
+      if (CDC_Transmit_FS(UserTxBufferFS, tx_buffer_index) == USBD_OK) {
+        tx_buffer_index = 0;
+      }
     }
+    
+    
+   
+/*
+    if (HAL_GetTick() - tick > 1000) {
+      tick = HAL_GetTick();
+      // If USB is connected do transmit loop, otherwise sleep //
+      if(hUsbDeviceFS.dev_state == USBD_STATE_CONFIGURED) {
+        itoa(voltage, (char *)&txBuffer[3], 10); 
+        itoa(temperature, (char *)&txBuffer[12], 10); 
+        itoa(pressure, (char *)&txBuffer[21], 10);      
+        itoa(altitude, (char *)&txBuffer[32], 10);
+        CDC_Transmit_FS(txBuffer, sizeof(txBuffer));
+      }
+    }
+*/
+
+  // normally pause execution until woken by an interrupt (nominally timer 16)
+    power_down(sleep);
   }
   /* USER CODE END 3 */
 }
@@ -240,7 +281,7 @@ void SystemClock_Config(void)
 
 /* USER CODE BEGIN 4 */
 void USBD_CDC_RxHandler(uint8_t *rxBuffer, uint32_t len) {
-  // deal with received data here...
+  cmd_read_input((char *)rxBuffer, len); 
 }
 
 void USB_Connect(void) {
@@ -275,7 +316,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   // Check which version of the timer triggered this callback and toggle LED
   if (htim == &htim16) {
-    blink();
+    led_blink();
 
     measure_battery_voltage();
     

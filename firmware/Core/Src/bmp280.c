@@ -13,6 +13,7 @@ uint32_t temperature;
 uint32_t altitude;
 uint16_t velocity;
 uint8_t spi_rx_buffer[26];
+uint32_t ground_level = 0;
 
 /* Private functions prototypes */
 void bmp_get_calibration(void);
@@ -60,7 +61,11 @@ uint32_t bmp_get_altitude(void) {
   if (pressure <= MAX_PRESSURE && pressure >= MIN_PRESSURE) {
     altitude = altitude_lut[n] + f * (altitude_lut[n+1] - altitude_lut[n]) / PRESSURE_STEP;
   };
-  return altitude;
+  return altitude - ground_level;
+}
+
+void bmp_set_ground_level(void){
+  ground_level = altitude;
 }
 
 void bmp_get_calibration(void) {	

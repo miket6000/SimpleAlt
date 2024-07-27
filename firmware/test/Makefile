@@ -1,4 +1,4 @@
-TARGET = table
+TARGET = test
 LIBS = -lm
 CC = gcc
 CFLAGS = -g -Wall
