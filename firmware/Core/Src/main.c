@@ -32,7 +32,7 @@
 #include "usbd_cdc_if.h"
 #include "spi_wrapper.h"
 #include "bmp280.h"
-#include "w25q.h"
+#include "w25qxx.h"
 #include "command.h"
 
 
@@ -62,6 +62,7 @@ extern uint8_t UserTxBufferFS[APP_TX_DATA_SIZE];
 uint8_t rx_buffer[APP_RX_DATA_SIZE];
 uint16_t tx_buffer_index = 0;
 uint16_t rx_buffer_index = 0;
+W25QXX_HandleTypeDef w25qxx; // Handler for all w25qxx operations! 
 
 extern USBD_HandleTypeDef hUsbDeviceFS;
 int8_t idle_sequence[] = {1, PAUSE, -2};
@@ -122,7 +123,7 @@ void read_register() {
   address = atoi(cmd_get_param());
 
   if (address > 0) {
-    data = w25q_read_register(address);
+    //data = w25q_read_register(address);
     print(itoa(data, str_buf, 16), strlen(str_buf));
   }
 }
@@ -145,9 +146,10 @@ void write_flash() {
   }
 
   if (len > 0) {
-    w25q_write_enable();
-    HAL_Delay(5);
-    w25q_write(address, data, len);
+    //w25q_write_enable();
+    //HAL_Delay(5);
+    //w25q_write(address, data, len);
+    w25qxx_write(&w25qxx, address, data, len);
     print("OK", 3);
   } else {
     print("ERR", 4);
@@ -165,7 +167,7 @@ void read_flash() {
   len = atoi(cmd_get_param());
 
   if (len > 0) {
-    w25q_read(address, buffer, len);
+    w25qxx_read(&w25qxx, address, buffer, len);
     for (int i = 0; i < len; i++) {
       print(itoa(buffer[i], str_buf, 16), strlen(str_buf));
     }
@@ -216,7 +218,10 @@ int main(void)
   HAL_GPIO_WritePin(nSENSE_EN_GPIO_Port, nSENSE_EN_Pin, GPIO_PIN_SET);
   
   bmp_init(BMP_CS_GPIO_Port, BMP_CS_Pin);
-  uint8_t mfg_id = w25q_init(FLASH_CS_GPIO_Port, FLASH_CS_Pin);
+  //uint8_t mfg_id = w25q_init(FLASH_CS_GPIO_Port, FLASH_CS_Pin);
+
+  W25QXX_result_t res;
+  res = w25qxx_init(&w25qxx, &hspi1, FLASH_CS_GPIO_Port, FLASH_CS_Pin); 
 
   /* The below is used to verify that we can talk to the flash chip.
   uint8_t tmp[] = "SPI:            \n";
@@ -241,7 +246,7 @@ int main(void)
   cmd_add("P", print_pressure); 
   cmd_add("T", print_temperature); 
   cmd_add("A", print_altitude); 
-  cmd_add("ERASE", w25q_erase_chip);
+  //cmd_add("ERASE", w25q_erase_chip);
   cmd_add("Z", bmp_set_ground_level);
   //cmd_add("G", get_param);
   //cmd_add("S", set_param);

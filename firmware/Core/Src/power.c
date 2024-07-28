@@ -11,14 +11,14 @@ void power_down(PowerLevel level) {
       HAL_PWR_EnterSLEEPMode(PWR_MAINREGULATOR_ON, PWR_SLEEPENTRY_WFI);
       break;
     case DEEPSLEEP:
-      w25q_power(W25Q_SLEEP);
+//      w25q_power(W25Q_SLEEP);
       HAL_PWR_DisableWakeUpPin(PWR_WAKEUP_PIN1);
       __HAL_PWR_CLEAR_FLAG(PWR_FLAG_WU);
       HAL_PWR_EnableWakeUpPin(PWR_WAKEUP_PIN1);
       HAL_PWR_EnterSTANDBYMode();
       break;
     case SHUTDOWN:
-      w25q_power(W25Q_SLEEP);
+//      w25q_power(W25Q_SLEEP);
       HAL_GPIO_WritePin(SHUTDOWN_GPIO_Port, SHUTDOWN_Pin, GPIO_PIN_SET);
       break;
     default:

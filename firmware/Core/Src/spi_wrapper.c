@@ -38,9 +38,16 @@ void spi_write_address(CSPin cs, uint8_t address, uint8_t *tx_buffer, uint8_t le
 }
 
 void spi_write_32bit_address(CSPin cs, uint32_t address, uint8_t *tx_buffer, uint8_t len) {
+  uint8_t a[4] = {
+    (uint8_t)((address >> 3) && 0xFF), 
+    (uint8_t)((address >> 2) && 0xFF), 
+    (uint8_t)((address >> 1) && 0xFF), 
+    (uint8_t)((address >> 0) && 0xFF)
+  };
+    
   HAL_GPIO_WritePin(cs.port, cs.pin, GPIO_PIN_RESET);
 
-  HAL_SPI_Transmit(&hspi1, (uint8_t *)&address, 4, 100);
+  HAL_SPI_Transmit(&hspi1, a, 4, 100);
   HAL_SPI_Transmit(&hspi1, tx_buffer, len, 100); 
 
   HAL_GPIO_WritePin(cs.port, cs.pin, GPIO_PIN_SET);
