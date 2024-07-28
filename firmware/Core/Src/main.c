@@ -59,7 +59,9 @@
 uint8_t sleep = SLEEP;
 extern uint8_t UserRxBufferFS[APP_RX_DATA_SIZE];
 extern uint8_t UserTxBufferFS[APP_TX_DATA_SIZE];
+uint8_t rx_buffer[APP_RX_DATA_SIZE];
 uint16_t tx_buffer_index = 0;
+uint16_t rx_buffer_index = 0;
 
 extern USBD_HandleTypeDef hUsbDeviceFS;
 int8_t idle_sequence[] = {1, PAUSE, -2};
@@ -144,10 +146,11 @@ void write_flash() {
 
   if (len > 0) {
     w25q_write_enable();
+    HAL_Delay(5);
     w25q_write(address, data, len);
-    print("OK\n", 3);
+    print("OK", 3);
   } else {
-    print("ERR\n", 4);
+    print("ERR", 4);
   }
 
 }
@@ -263,6 +266,12 @@ int main(void)
     temperature = bmp_get_temperature();
     pressure = bmp_get_pressure();
     altitude = bmp_get_altitude();
+    
+    if (rx_buffer_index > 0) {
+      cmd_read_input((char *)rx_buffer, rx_buffer_index);
+      rx_buffer_index = 0;
+    }
+    
     if (tx_buffer_index > 0) {
       if (CDC_Transmit_FS(UserTxBufferFS, tx_buffer_index) == USBD_OK) {
         tx_buffer_index = 0;
@@ -337,7 +346,9 @@ void SystemClock_Config(void)
 
 /* USER CODE BEGIN 4 */
 void USBD_CDC_RxHandler(uint8_t *rxBuffer, uint32_t len) {
-  cmd_read_input((char *)rxBuffer, len); 
+  //DANGER - does not check for rx_buffer over run.
+  memcpy(&rx_buffer[rx_buffer_index], rxBuffer, len);
+  rx_buffer_index += len;
 }
 
 void USB_Connect(void) {
