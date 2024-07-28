@@ -17,6 +17,16 @@ _autosave-*
 *-save.kicad_pcb
 fp-info-cache
 
+# Build artifacts
+*.o
+*.bin
+*.hex
+*.elf
+
+# hidden files
+.*
+
+
 # Netlist files (exported from Eeschema)
 *.net
 
