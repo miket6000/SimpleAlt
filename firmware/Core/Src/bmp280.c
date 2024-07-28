@@ -6,17 +6,17 @@
 
 /* Globals */
 const uint32_t standard_pressure = 101325;
-CSPin bmp_cs;
-BMPCalibrationData cal;
-uint32_t pressure;
-uint32_t temperature;
-uint32_t altitude;
-uint16_t velocity;
-uint8_t spi_rx_buffer[26];
-uint32_t ground_level = 0;
+static CSPin bmp_cs;
+static BMPCalibrationData cal;
+static uint32_t pressure;
+static int32_t temperature;
+static uint32_t altitude;
+static uint16_t velocity;
+static uint8_t spi_rx_buffer[26];
+static uint32_t ground_level = 0;
 
 /* Private functions prototypes */
-void bmp_get_calibration(void);
+static void bmp_get_calibration(void);
 static int32_t bmp280_compensate_T_int32(int32_t adc_T);
 static uint32_t bmp280_compensate_P_int32(int32_t adc_P);
 

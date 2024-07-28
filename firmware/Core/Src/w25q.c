@@ -17,9 +17,24 @@ uint8_t w25q_init(GPIO_TypeDef *port, uint16_t pin) {
   return rx_buffer[3];
 }
 
+//0x05 = status register 1
+//0x35 = status register 2
+//0x15 = status register 3
+//
+uint8_t w25q_read_register(uint8_t address) {
+  uint8_t reg = 0;
+  spi_read_address(flash_cs, address, &reg, 1); 
+  return reg;
+}
+
+uint8_t w25q_read_status(void) {
+  uint8_t status = 0;
+  spi_read_address(flash_cs, 0x05, &status, 1);
+  return status;
+}
+
 void w25q_write_enable(void) {
-  uint8_t write_enable = 1;
-  spi_write_address(flash_cs, 0x06, &write_enable, 1); 
+  spi_write_byte(flash_cs, 0x06); 
 }
 
 void w25q_erase_chip() {
@@ -29,7 +44,7 @@ void w25q_erase_chip() {
 
 void w25q_write(uint32_t address, uint8_t *tx_buffer, uint16_t len) {
   address &= 0x00FFFFFF; // SPI only has a 24 bit address space
-  address |= 0x03000000; // upper byte is command, 0x03 = read.
+  address |= 0x02000000; // upper byte is command, 0x02 = write.
   spi_write_32bit_address(flash_cs, address, tx_buffer, len);
 }
 

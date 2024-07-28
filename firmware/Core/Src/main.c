@@ -66,7 +66,10 @@ int8_t idle_sequence[] = {1, PAUSE, -2};
 int8_t usb_sequence[] = {2, SHORT_PAUSE, -2};
 int8_t voltage_sequence[] = {1, 2, 3, PAUSE, -1};
 int8_t altitude_sequence[] = {3, 5, 7, 0, PAUSE, -1};
-
+int16_t temperature = 0;
+uint32_t pressure = 101325;
+uint16_t voltage = 0;
+int32_t altitude = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -100,7 +103,6 @@ void print_altitude() {
 
 void print_temperature() {
   char buffer[8];
-  char* param = NULL;
   itoa(bmp_get_temperature(), buffer, 10);
   print(buffer, strlen(buffer));
 }
@@ -110,6 +112,62 @@ void print(char *tx_buffer, uint16_t len) {
   tx_buffer_index += len;
 }
 
+void read_register() {
+  uint32_t address = 0;
+  uint8_t data = 0;
+  char str_buf[3] = {0};
+  
+  address = atoi(cmd_get_param());
+
+  if (address > 0) {
+    data = w25q_read_register(address);
+    print(itoa(data, str_buf, 16), strlen(str_buf));
+  }
+}
+
+void write_flash() {
+  char* param;
+  uint32_t address = 0;
+  uint8_t data[16];
+  uint8_t len = 0;
+
+  param = cmd_get_param();
+  if (param != NULL) {
+    address = atoi(param);
+  }
+
+  param = cmd_get_param();
+  while (param != NULL) {
+    data[len++] = atoi(param);
+    param = cmd_get_param();
+  }
+
+  if (len > 0) {
+    w25q_write_enable();
+    w25q_write(address, data, len);
+    print("OK\n", 3);
+  } else {
+    print("ERR\n", 4);
+  }
+
+}
+
+void read_flash() {
+  uint32_t address;
+  uint8_t len;
+  uint8_t buffer[16];
+  char str_buf[3] = {0};
+  
+  address = atoi(cmd_get_param());
+  len = atoi(cmd_get_param());
+
+  if (len > 0) {
+    w25q_read(address, buffer, len);
+    for (int i = 0; i < len; i++) {
+      print(itoa(buffer[i], str_buf, 16), strlen(str_buf));
+    }
+  }
+}
 /* USER CODE END 0 */
 
 /**
@@ -120,15 +178,6 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-  uint8_t txBuffer[] = "V:       T:       P:         A:        \n\r";
-  int32_t temperature = 0;
-  uint32_t pressure = 0;
-  int32_t altitude = 0;
-  int16_t voltage = 0;
-
-
-
-
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -185,12 +234,19 @@ int main(void)
   led_add_sequence(altitude_sequence);
   // and got to idle blink
   led_add_sequence(idle_sequence);
-  cmd_add("LED_ON", led_on);
+  //cmd_add("LED_ON", led_on);
   cmd_add("P", print_pressure); 
   cmd_add("T", print_temperature); 
   cmd_add("A", print_altitude); 
   cmd_add("ERASE", w25q_erase_chip);
-  cmd_add("G", bmp_set_ground_level);
+  cmd_add("Z", bmp_set_ground_level);
+  //cmd_add("G", get_param);
+  //cmd_add("S", set_param);
+  cmd_add("RR", read_register);
+  cmd_add("W", write_flash);
+  cmd_add("R", read_flash);
+  
+
   cmd_set_print_function(print);
 
   /* USER CODE END 2 */

@@ -3,7 +3,7 @@
 #include "adc.h"
 #include "w25q.h"
 
-uint16_t voltage = 4000;
+static uint16_t voltage = 4000;
 
 void power_down(PowerLevel level) {
   switch (level) {
