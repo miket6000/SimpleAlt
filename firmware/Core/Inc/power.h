@@ -4,9 +4,10 @@
 #include <stdint.h>
 
 typedef enum {
-    SLEEP = 0,
-    DEEPSLEEP = 1,
-    SHUTDOWN = 2
+    AWAKE = 0,
+    SNOOZE = 1,
+    SLEEP = 2,
+    SHUTDOWN = 3
 } PowerLevel;
 
 void power_down(PowerLevel level);

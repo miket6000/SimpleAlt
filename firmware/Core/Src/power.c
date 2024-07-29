@@ -3,14 +3,16 @@
 #include "adc.h"
 #include "w25q.h"
 
-static uint16_t voltage = 4000;
+static uint16_t voltage = 0;
 
 void power_down(PowerLevel level) {
   switch (level) {
-    case SLEEP:
+    case AWAKE:
+      break;
+    case SNOOZE:
       HAL_PWR_EnterSLEEPMode(PWR_MAINREGULATOR_ON, PWR_SLEEPENTRY_WFI);
       break;
-    case DEEPSLEEP:
+    case SLEEP:
 //      w25q_power(W25Q_SLEEP);
       HAL_PWR_DisableWakeUpPin(PWR_WAKEUP_PIN1);
       __HAL_PWR_CLEAR_FLAG(PWR_FLAG_WU);
@@ -38,7 +40,7 @@ void measure_battery_voltage(void) {
     case 3:
       HAL_GPIO_WritePin(nSENSE_EN_GPIO_Port, nSENSE_EN_Pin, GPIO_PIN_SET);
       if (voltage < 3000) {
-        power_down(DEEPSLEEP);
+        power_down(SLEEP);
       }
       break;
     default:

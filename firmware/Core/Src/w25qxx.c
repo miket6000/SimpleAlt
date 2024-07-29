@@ -129,11 +129,6 @@ W25QXX_result_t w25qxx_wait_for_ready(W25QXX_HandleTypeDef *w25qxx, uint32_t tim
     return ret;
 }
 
-#ifdef W25QXX_QSPI
-W25QXX_result_t w25qxx_init(W25QXX_HandleTypeDef *w25qxx, QSPI_HandleTypeDef *qhspi) {
-
-}
-#else
 W25QXX_result_t w25qxx_init(W25QXX_HandleTypeDef *w25qxx, SPI_HandleTypeDef *hspi, GPIO_TypeDef *cs_port, uint16_t cs_pin) {
 
     W25QXX_result_t result = W25QXX_Ok;
@@ -146,34 +141,20 @@ W25QXX_result_t w25qxx_init(W25QXX_HandleTypeDef *w25qxx, SPI_HandleTypeDef *hsp
 
     cs_off(w25qxx);
 
-    uint32_t id = w25qxx_read_id(w25qxx);
-    if (id) {
-        w25qxx->manufacturer_id = (uint8_t) (id >> 16);
-        w25qxx->device_id = (uint16_t) (id & 0xFFFF);
-        w25qxx->block_size = 0x10000;
-        w25qxx->sector_size = 0x1000;
-        w25qxx->sectors_in_block = 0x10;
-        w25qxx->page_size = 0x100;
-        w25qxx->pages_in_sector = 0x10;
-        w25qxx->block_count = 0x20;
-    } else {
-        result = W25QXX_Err;
-    }
-
-    if (result == W25QXX_Err) {
-        // Zero the handle so it is clear initialization failed!
-        memset(w25qxx, 0, sizeof(W25QXX_HandleTypeDef));
-    }
+    w25qxx->manufacturer_id = 0xef;   // redundant
+    w25qxx->device_id = 0x1415;       // also redundant
+    w25qxx->block_size = 0x10000;     // All verified
+    w25qxx->sector_size = 0x1000;     //
+    w25qxx->sectors_in_block = 0x10;  //
+    w25qxx->page_size = 0x100;        //
+    w25qxx->pages_in_sector = 0x10;   //
+    w25qxx->block_count = 0x20;       // from datasheet. 
 
     return result;
 
 }
-#endif
 
 W25QXX_result_t w25qxx_read(W25QXX_HandleTypeDef *w25qxx, uint32_t address, uint8_t *buf, uint32_t len) {
-
-    W25_DBG("w25qxx_read - address: 0x%08lx, lengh: 0x%04lx", address, len);
-
     // Transmit buffer holding command and address
     uint8_t tx[4] = {
     W25QXX_READ_DATA, (uint8_t) (address >> 16), (uint8_t) (address >> 8), (uint8_t) (address), };

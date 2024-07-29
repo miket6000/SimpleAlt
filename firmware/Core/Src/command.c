@@ -18,9 +18,17 @@ static Command commands[MAX_NUM_COMMANDS];
 static char prompt[] = "\n> ";
 static char no_match[] = "Command not recognised.";
 static char eol[] = "\n";
-bool interactive = true;
+bool interactive = false;
 
 void (*print_function)(char *str, uint16_t len);
+
+void cmd_set_interactive(void) {
+  interactive = true;
+}
+
+void cmd_unset_interactive(void) {
+  interactive = false;
+}
 
 void cmd_print(char *buffer, uint16_t len) {
   if (interactive) {

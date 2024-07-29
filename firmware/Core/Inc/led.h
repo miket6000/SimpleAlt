@@ -18,6 +18,6 @@ typedef enum {
 } LedState;
 
 void led(LedState state);
-void led_add_sequence(int8_t *seq);
+void led_add_sequence(const int8_t *const seq);
 void led_blink();
 #endif

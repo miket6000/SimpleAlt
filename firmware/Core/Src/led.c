@@ -6,11 +6,11 @@
 #define VALID_MASK 0x02
 
 /* Sequencer state variables */
-uint8_t sequence_index = 0;
-uint8_t blink_index = 0;
-uint8_t blink_off_counter = BLINK_OFF_TIME;
-uint8_t sequence_head = 0;
-int8_t sequence[SEQUENCE_LEN] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+static uint8_t sequence_index = 0;
+static uint8_t blink_index = 0;
+static uint8_t blink_off_counter = BLINK_OFF_TIME;
+static uint8_t sequence_head = 0;
+static int8_t sequence[SEQUENCE_LEN] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
 
 /* Seqence codes are read right to left, two bits at a time. The first bit of each pair
  * indicates that this code is still valid. The second bit indicates whether the LED is 
@@ -18,7 +18,7 @@ int8_t sequence[SEQUENCE_LEN] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
  * LEDs are on for 1 sub-cycle, then off for BLINK_OFF_TIME sub-cycles. 
  * Cycle length is determined by time between calls to Led_Blink().
  */
-uint32_t codes[] = {  
+static const uint32_t codes[] = {  
   0x0AAFFFFF, //0
   0x000000AB, //1
   0x000002AF, //2
@@ -34,7 +34,7 @@ uint32_t codes[] = {
   0x00000000  //NOTHING
 };
 
-void step_sequencer(void);
+static void step_sequencer(void);
 
 void led(LedState state) {
   switch (state) {
@@ -50,7 +50,7 @@ void led(LedState state) {
   }
 }
 
-void led_add_sequence(int8_t *new_sequence) {
+void led_add_sequence(const int8_t *const new_sequence) {
   uint8_t i = 0;
 
   while (new_sequence[i] >= 0) {
@@ -88,7 +88,7 @@ void led_blink(void) {
   }
 }
 
-void step_sequencer() {
+static void step_sequencer() {
   sequence_index++;
   if (sequence_index >= SEQUENCE_LEN) {
     sequence_index = 0;

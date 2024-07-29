@@ -27,6 +27,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <stdbool.h>
 #include "led.h"
 #include "power.h"
 #include "usbd_cdc_if.h"
@@ -45,6 +46,13 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define REFRESH_MS  20
+#define ALT_RING_BUF_LEN  20
+#define SAMPLE_DIFFERENCE  10
+#define LAUNCH_SPEED_KMPH  50
+#define LAUNCH_THRESHOLD (LAUNCH_SPEED_KMPH * REFRESH_MS * SAMPLE_DIFFERENCE / 36)
+
+#define DATA_OFFSET 0x10000LLU
 
 /* USER CODE END PD */
 
@@ -56,23 +64,38 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-uint8_t sleep = SLEEP;
+uint8_t sleep = SNOOZE;
+uint8_t refresh_time = REFRESH_MS;
+
+bool recording = false;
+
+extern USBD_HandleTypeDef hUsbDeviceFS;
 extern uint8_t UserRxBufferFS[APP_RX_DATA_SIZE];
 extern uint8_t UserTxBufferFS[APP_TX_DATA_SIZE];
 uint8_t rx_buffer[APP_RX_DATA_SIZE];
 uint16_t tx_buffer_index = 0;
 uint16_t rx_buffer_index = 0;
-W25QXX_HandleTypeDef w25qxx; // Handler for all w25qxx operations! 
 
-extern USBD_HandleTypeDef hUsbDeviceFS;
-int8_t idle_sequence[] = {1, PAUSE, -2};
-int8_t usb_sequence[] = {2, SHORT_PAUSE, -2};
-int8_t voltage_sequence[] = {1, 2, 3, PAUSE, -1};
-int8_t altitude_sequence[] = {3, 5, 7, 0, PAUSE, -1};
+
+W25QXX_HandleTypeDef w25qxx; // Handler for all w25qxx operations! 
+uint32_t next_free_index_slot = 0;
+uint32_t next_free_address = 0;
+
+
+
+const int8_t idle_sequence[] = {1, PAUSE, -2};
+const int8_t usb_sequence[] = {0, -2};
+const int8_t recording_sequence[] = {2, SHORT_PAUSE, -2}; 
+
+//const int8_t voltage_sequence[] = {1, 2, 3, PAUSE, -1};
+//const int8_t altitude_sequence[] = {3, 5, 7, 0, PAUSE, -1};
+
+
 int16_t temperature = 0;
 uint32_t pressure = 101325;
 uint16_t voltage = 0;
 int32_t altitude = 0;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -83,15 +106,14 @@ void USBD_CDC_RxHandler(uint8_t *rxBuffer, uint32_t len);
 void USB_Connect(void);
 void USB_Disconnect(void);
 void print(char *tx_buffer, uint16_t len);
+void led_blink(void);
+//measure_battery_voltage();
+void read_button(void);
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-void led_on() {
-  led(ON);
-}
-
 void print_pressure() {
   char buffer[8];
   itoa(bmp_get_pressure(), buffer, 10);
@@ -157,6 +179,12 @@ void write_flash() {
 
 }
 
+
+/* Reads param2 bytes (max 16) from address param1 and sends to serial.
+ * e.g. R 0 16 to read 16 bytes at address 0.
+ * Possible optimisation is to remove the buffer and write straight into the USB buffer.
+ * Would need a revamp of the "print" function and removal of the interactive mode.
+ */
 void read_flash() {
   uint32_t address;
   uint8_t len;
@@ -169,10 +197,45 @@ void read_flash() {
   if (len > 0) {
     w25qxx_read(&w25qxx, address, buffer, len);
     for (int i = 0; i < len; i++) {
+      if (buffer[i] < 0x10) {
+        print("0",1);
+      }
       print(itoa(buffer[i], str_buf, 16), strlen(str_buf));
     }
   }
 }
+
+void erase_flash() {
+  w25qxx_chip_erase(&w25qxx);
+  print("OK",2);
+}
+
+void open_flash() {
+  int16_t i = 0;
+  uint32_t address = 0;
+  uint32_t last_address = DATA_OFFSET;
+  w25qxx_read(&w25qxx, i, (uint8_t *)&address, 4);
+  while (i < DATA_OFFSET && address < 0xFFFFFFFF) {
+    i+=4;
+    last_address = address;
+    w25qxx_read(&w25qxx, i, (uint8_t *)&address, 4);
+  }
+  next_free_index_slot = i;
+  next_free_address = last_address;
+}
+
+void close_flash() {
+  w25qxx_write(&w25qxx, next_free_index_slot, (uint8_t *)&next_free_address, 4);
+}
+
+void save(char label, uint8_t *data, uint16_t len) {
+  if (recording) {
+    w25qxx_write(&w25qxx, next_free_address, (uint8_t *)&label, 1);
+    w25qxx_write(&w25qxx, next_free_address+1, data, len);
+    next_free_address += (len + 1);
+  }
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -183,6 +246,9 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
+  static uint32_t tick = 0;
+  static uint32_t last_tick = 0;
+
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -237,69 +303,77 @@ int main(void)
   HAL_TIM_Base_Start_IT(&htim16);
 
   // flash out the voltage
-  led_add_sequence(voltage_sequence);
+  //led_add_sequence(voltage_sequence);
   // and the last altitude
-  led_add_sequence(altitude_sequence);
+  //led_add_sequence(altitude_sequence);
   // and got to idle blink
   led_add_sequence(idle_sequence);
   //cmd_add("LED_ON", led_on);
   cmd_add("P", print_pressure); 
   cmd_add("T", print_temperature); 
   cmd_add("A", print_altitude); 
-  //cmd_add("ERASE", w25q_erase_chip);
-  cmd_add("Z", bmp_set_ground_level);
-  //cmd_add("G", get_param);
+  cmd_add("ERASE", erase_flash);
+//  cmd_add("Z", bmp_set_ground_level);
+  cmd_add("I", cmd_set_interactive);
+  cmd_add("i", cmd_unset_interactive);
   //cmd_add("S", set_param);
-  cmd_add("RR", read_register);
-  cmd_add("W", write_flash);
+//  cmd_add("RR", read_register);
+//  cmd_add("W", write_flash);
   cmd_add("R", read_flash);
   
-
   cmd_set_print_function(print);
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-//  uint32_t tick = HAL_GetTick();
-  while (1)
-  {
+  while (1) {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    voltage = get_battery_voltage();
-    temperature = bmp_get_temperature();
-    pressure = bmp_get_pressure();
-    altitude = bmp_get_altitude();
-    
-    if (rx_buffer_index > 0) {
-      cmd_read_input((char *)rx_buffer, rx_buffer_index);
-      rx_buffer_index = 0;
-    }
-    
-    if (tx_buffer_index > 0) {
-      if (CDC_Transmit_FS(UserTxBufferFS, tx_buffer_index) == USBD_OK) {
-        tx_buffer_index = 0;
-      }
-    }
-    
-    
-   
-/*
-    if (HAL_GetTick() - tick > 1000) {
-      tick = HAL_GetTick();
-      // If USB is connected do transmit loop, otherwise sleep //
-      if(hUsbDeviceFS.dev_state == USBD_STATE_CONFIGURED) {
-        itoa(voltage, (char *)&txBuffer[3], 10); 
-        itoa(temperature, (char *)&txBuffer[12], 10); 
-        itoa(pressure, (char *)&txBuffer[21], 10);      
-        itoa(altitude, (char *)&txBuffer[32], 10);
-        CDC_Transmit_FS(txBuffer, sizeof(txBuffer));
-      }
-    }
-*/
 
-  // normally pause execution until woken by an interrupt (nominally timer 16)
+    tick = HAL_GetTick();
+    if ((tick - last_tick) >= refresh_time) {
+      /* Make measurements */
+      last_tick = tick;
+
+      /* non-reentrant timer based function calls */
+      led_blink();
+      measure_battery_voltage();
+      read_button();
+    
+      /* measurements */
+      voltage = get_battery_voltage();
+      temperature = bmp_get_temperature();
+      pressure = bmp_get_pressure();
+      altitude = bmp_get_altitude();    
+     
+      
+      /* don't do this too often, it'll fill the flash pretty quick (400k samples total)
+       * before saving we need to "open" the flash, and if we don't close when we're 
+       * done we'll corrupt the filesystem.
+       */
+      //save("P", &pressure, 4);
+      save('A', (uint8_t *)&altitude, 4);
+
+
+
+      /* Deal with data recieved via USB */
+      if (rx_buffer_index > 0) {
+        cmd_read_input((char *)rx_buffer, rx_buffer_index);
+        rx_buffer_index = 0;
+      }
+    
+      /* Transmit any data in the output buffer */
+      if (tx_buffer_index > 0) {
+        if (CDC_Transmit_FS(UserTxBufferFS, tx_buffer_index) == USBD_OK) {
+          tx_buffer_index = 0;
+        }
+      }
+    }
+   
+    // Pause execution until woken by an interrupt.
+    // The systick will do this for us every ms if we're in normal mode.
     power_down(sleep);
   }
   /* USER CODE END 3 */
@@ -374,12 +448,22 @@ void read_button() {
   if (get_button_state()) {
     button_counter++;
   } else {
-    if (button_counter > 100) {
-      sleep = DEEPSLEEP;  // 2 seconds = deep sleep, wake up by pressing button again
-    }
     if (button_counter > 250) {
       sleep = SHUTDOWN;  // 5 seconds = shutdown, need USB to wake, lowest power
+    } else if (button_counter > 100) {
+      sleep = SLEEP;  // 2 seconds = sleep, wake up by pressing button again
+    } else if (button_counter > 2) {
+      if (recording) {  // debounced press = toggle recording state
+        recording = false;
+        led_add_sequence(idle_sequence);
+        close_flash();
+      } else {
+        recording = true;
+        led_add_sequence(recording_sequence);
+        open_flash();
+      }
     }
+
     button_counter = 0;
   }
 }  
@@ -388,11 +472,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   // Check which version of the timer triggered this callback and toggle LED
   if (htim == &htim16) {
-    led_blink();
-
-    measure_battery_voltage();
-    
-    read_button();
   }
 }
 
