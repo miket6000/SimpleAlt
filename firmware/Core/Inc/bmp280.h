@@ -46,6 +46,6 @@ typedef struct {
 void bmp_init(GPIO_TypeDef *port, uint16_t pin);
 int32_t bmp_get_temperature(void);
 uint32_t bmp_get_pressure(void);
-uint32_t bmp_get_altitude(void);
+int32_t bmp_get_altitude(void);
 void bmp_set_ground_level(void);
 #endif //BMP280_H

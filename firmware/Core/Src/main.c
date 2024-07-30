@@ -205,7 +205,23 @@ void read_flash() {
   }
 }
 
+void read_flash_binary() {
+  uint32_t address;
+  uint8_t len;
+  uint8_t buffer[16];
+  char str_buf[3] = {0};
+  
+  address = atoi(cmd_get_param());
+  len = atoi(cmd_get_param());
+
+  if (len > 0) {
+    w25qxx_read(&w25qxx, address, buffer, len);
+    print(buffer, sizeof(buffer));
+  }
+}
+
 void erase_flash() {
+  print("Please wait...\n", 15);
   w25qxx_chip_erase(&w25qxx);
   print("OK",2);
 }
@@ -313,15 +329,19 @@ int main(void)
   cmd_add("T", print_temperature); 
   cmd_add("A", print_altitude); 
   cmd_add("ERASE", erase_flash);
-//  cmd_add("Z", bmp_set_ground_level);
   cmd_add("I", cmd_set_interactive);
   cmd_add("i", cmd_unset_interactive);
   //cmd_add("S", set_param);
 //  cmd_add("RR", read_register);
 //  cmd_add("W", write_flash);
   cmd_add("R", read_flash);
+  cmd_add("r", read_flash_binary);
   
   cmd_set_print_function(print);
+
+  //1 second delay to give the user time to release the power on button. 
+  //This prevents us detecting the release as a seperate event later on.
+  HAL_Delay(1000);
 
   /* USER CODE END 2 */
 

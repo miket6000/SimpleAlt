@@ -63,10 +63,6 @@ int32_t bmp_get_altitude(void) {
   return altitude;
 }
 
-void bmp_set_ground_level(void){
-  ground_level = altitude;
-}
-
 void bmp_get_calibration(void) {	
   spi_read_address(bmp_cs, BMP_CALIB00, spi_rx_buffer, 24);
   cal.dig_T1 = ((uint16_t)spi_rx_buffer[1] << 8) | spi_rx_buffer[0];
