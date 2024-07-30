@@ -16,6 +16,7 @@ HEADERS = $(wildcard *.h)
 
 .PRECIOUS: $(TARGET) $(OBJECTS)
 
+
 $(TARGET): $(OBJECTS)
 	$(CC) $(OBJECTS) -Wall $(LIBS) -o $@
 

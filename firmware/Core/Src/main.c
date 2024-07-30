@@ -208,7 +208,7 @@ void read_flash() {
 void read_flash_binary() {
   uint32_t address;
   uint8_t len;
-  uint8_t buffer[16];
+  uint8_t buffer[64];
   char str_buf[3] = {0};
   
   address = atoi(cmd_get_param());
@@ -216,7 +216,7 @@ void read_flash_binary() {
 
   if (len > 0) {
     w25qxx_read(&w25qxx, address, buffer, len);
-    print(buffer, sizeof(buffer));
+    print(buffer, len);
   }
 }
 

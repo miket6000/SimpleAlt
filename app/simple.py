@@ -1,30 +1,54 @@
 #!/usr/bin/env python3
-import struct
 import serial
+import csv
+from datetime import datetime
+import time
 
-def swap32(i):
-    return struct.unpack("<I", struct.pack(">I", i))[0]
+start_time = time.time()
+now = datetime.now() # current date and time
+date_time = now.strftime("%m/%d/%Y, %H:%M:%S")
+filename = f"SimpleAlt_log_{now.strftime('%Y%m%d_%H%M%S')}.csv"
 
 offset = 0x10000
 addresses = [offset]
-rev_addr = 0
-
-line = b''
 addr = 0
+a = 0
+
+num_records = 12
+record_length = 5
+bytes_to_read = num_records * record_length
+
+data = []
 
 with serial.Serial('/dev/ttyACM0', timeout=1) as ser:
-    while (rev_addr != 0xffffffff):
-        ser.write(f"R {addr} 4\n".encode())
-        addr += 4
-        s = ser.read(4 * 2)
-        rev_addr = int(s, 16)
-        if (rev_addr != 0xffffffff):
-            addresses.append(swap32(rev_addr))
+    
+    # ensure we're not in interactive mode.
+    ser.write(f"i\n".encode())
 
-    for start in range(len(addresses)-1):
-        for i in range(addresses[start],addresses[start+1],5):
-            ser.write(f"R {i} 5\n".encode())
-            label = chr(int(ser.read(2),16))
-            data = swap32(int(ser.read(8),16))
-            print(f"{start}, {i}, {label}, {data}")
-            
+    # start reading the address block until we run out of recording addresses
+    while (a != 0xffffffff):
+        ser.write(f"r {addr} 4\n".encode())
+        addr += 4
+        a = int.from_bytes(ser.read(4), "little")
+        if (a != 0xffffffff):
+            addresses.append(a)
+
+    print(f"Recordings discovered: {len(addresses)-1}")
+
+    # Loop through the recordings and read the data out into a list of tuples
+    for recording in range(len(addresses)-1):
+        for i in range(addresses[recording], addresses[recording+1], bytes_to_read):
+            ser.write(f"r {i} {bytes_to_read}\n".encode())
+            for r in range(num_records):
+                label = chr(int.from_bytes(ser.read(1)))
+                if (label != chr(0xff)):
+                    data.append((recording, label, int.from_bytes(ser.read(4), "little")))
+
+print(f"Total records read: {len(data)} in {time.time() - start_time} seconds")
+
+with open(filename,'w') as out:
+    csv_out = csv.writer(out)
+    csv_out.writerow(['Recording','Label','Value'])
+    csv_out.writerows(data)
+
+print(f"File saved as {filename}")
