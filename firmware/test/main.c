@@ -1,9 +1,24 @@
 #include "led.h"
 #include "command.h"
+#include "altitude.h"
 #include <stdio.h>
 
 //#define TEST_LED
-#define TEST_COMMAND
+//#define TEST_COMMAND
+#define TEST_ALTITUDE
+
+
+int32_t altitude = 0;
+uint32_t pressure = 100200;
+
+uint32_t bmp_get_altitude(void) {
+  uint8_t n = (MAX_PRESSURE - pressure) / PRESSURE_STEP;
+  uint16_t f = (MAX_PRESSURE - pressure) % PRESSURE_STEP;
+  if (pressure <= MAX_PRESSURE && pressure >= MIN_PRESSURE) {
+    altitude = altitude_lut[n] + f * (altitude_lut[n+1] - altitude_lut[n]) / PRESSURE_STEP;
+  };
+  return altitude;
+}
 
 
 void one() {
@@ -44,6 +59,18 @@ int main(void) {
   }
 #endif //TEST_LED
 
+#ifdef TEST_ALTITUDE
+  for (int p = MIN_PRESSURE; p < MAX_PRESSURE; p += 3050) {
+    pressure = p;
+    bmp_get_altitude();
+    printf("P:%d, A:%d\n", pressure, altitude);
+  }
+
+  pressure = MAX_PRESSURE;
+  bmp_get_altitude();
+  printf("P:%d, A:%d\n", pressure, altitude);
+
+#endif //TEST_ALTITUDE
 
 #ifdef TEST_COMMAND
   cmd_add("ONE", one);

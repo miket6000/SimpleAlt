@@ -10,10 +10,9 @@ static CSPin bmp_cs;
 static BMPCalibrationData cal;
 static uint32_t pressure;
 static int32_t temperature;
-static uint32_t altitude;
+static int32_t altitude;
 static uint16_t velocity;
 static uint8_t spi_rx_buffer[26];
-static uint32_t ground_level = 0;
 
 /* Private functions prototypes */
 static void bmp_get_calibration(void);
@@ -55,13 +54,13 @@ uint32_t bmp_get_pressure(void) {
   return pressure;
 }
 
-uint32_t bmp_get_altitude(void) {
+int32_t bmp_get_altitude(void) {
   uint8_t n = (MAX_PRESSURE - pressure) / PRESSURE_STEP;
   uint16_t f = (MAX_PRESSURE - pressure) % PRESSURE_STEP;
   if (pressure <= MAX_PRESSURE && pressure >= MIN_PRESSURE) {
     altitude = altitude_lut[n] + f * (altitude_lut[n+1] - altitude_lut[n]) / PRESSURE_STEP;
   };
-  return altitude - ground_level;
+  return altitude;
 }
 
 void bmp_set_ground_level(void){

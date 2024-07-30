@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include <math.h>
 
-#define MIN_PRESSURE  2600
-#define MAX_PRESSURE  102000
+#define MIN_PRESSURE  20000
+#define MAX_PRESSURE  103000
 #define PRESSURE_STEP   1000
 
 int main (void) {
