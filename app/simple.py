@@ -46,7 +46,7 @@ with serial.Serial('/dev/ttyACM0', timeout=1) as ser:
 
 print(f"Total records read: {len(data)} in {time.time() - start_time} seconds")
 
-with open(filename,'w') as out:
+with open(filename, newline='', 'w') as out:
     csv_out = csv.writer(out)
     csv_out.writerow(['Recording','Label','Value'])
     csv_out.writerows(data)
