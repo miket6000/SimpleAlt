@@ -17,7 +17,6 @@ a = 0
 """ 
 The record length is fixed at 5 (char label + (u)int32_t). 
 It's important that bytes_to_read does not exceed the maximum buffer size 
-of the altimeter (currently 64 bytes) as there's no bounds checking on the len.
 """
 num_records = 12
 record_length = 5
@@ -51,7 +50,7 @@ with serial.Serial('/dev/ttyACM0', timeout=1) as ser:
 
 print(f"Total records read: {len(data)} in {time.time() - start_time} seconds")
 
-with open(filename, newline='', 'w') as out:
+with open(filename, 'w', newline='') as out:
     csv_out = csv.writer(out)
     csv_out.writerow(['Recording','Label','Value'])
     csv_out.writerows(data)
