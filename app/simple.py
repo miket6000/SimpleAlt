@@ -14,6 +14,11 @@ addresses = [offset]
 addr = 0
 a = 0
 
+""" 
+The record length is fixed at 5 (char label + (u)int32_t). 
+It's important that bytes_to_read does not exceed the maximum buffer size 
+of the altimeter (currently 64 bytes) as there's no bounds checking on the len.
+"""
 num_records = 12
 record_length = 5
 bytes_to_read = num_records * record_length
