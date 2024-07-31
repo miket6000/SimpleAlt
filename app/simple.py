@@ -68,7 +68,7 @@ filename = f"SimpleAlt_flight_{input_str}_{now.strftime('%Y%m%d_%H%M%S')}.csv"
 
 with open(filename, 'w', newline='') as out:
     csv_out = csv.writer(out)
-    csv_out.writerow(['Time','Label','Value'])
+    csv_out.writerow(['Time','Value'])
     csv_out.writerows(data)
 
 print(f"File saved as {filename}")
