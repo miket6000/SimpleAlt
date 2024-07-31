@@ -42,7 +42,7 @@ with serial.Serial('/dev/ttyACM0', timeout=1) as ser:
             for r in range(num_records):
                 label = chr(int.from_bytes(ser.read(1)))
                 if (label != chr(0xff)):
-                    data.append((recording, label, int.from_bytes(ser.read(4), "little")))
+                    data.append((recording, label, int.from_bytes(ser.read(4), byteorder="little", signed=True)))
 
 print(f"Total records read: {len(data)} in {time.time() - start_time} seconds")
 
