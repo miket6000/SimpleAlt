@@ -214,7 +214,7 @@ void read_flash_binary() {
   address = atoi(cmd_get_param());
   len = atoi(cmd_get_param());
 
-  if (len > 0) {
+  if (len > 0 && <= sizeof(buffer)) {
     w25qxx_read(&w25qxx, address, buffer, len);
     print(buffer, len);
   }

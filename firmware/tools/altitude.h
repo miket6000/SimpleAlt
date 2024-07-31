@@ -1,11 +1,12 @@
 #ifndef ALTITUDE_H
 #define ALTITUDE_H
 
-#define MIN_PRESSURE 2600
-#define MAX_PRESSURE 102000
+#define MIN_PRESSURE 20000
+#define MAX_PRESSURE 103000
 #define PRESSURE_STEP 1000
 
 const int32_t altitude_lut[] = {
+  -13853, // 103000 Pa
   -5604, // 102000 Pa
   2709, // 101000 Pa
   11090, // 100000 Pa
@@ -89,23 +90,6 @@ const int32_t altitude_lut[] = {
   1118081, // 22000 Pa
   1147297, // 21000 Pa
   1177663, // 20000 Pa
-  1209284, // 19000 Pa
-  1242283, // 18000 Pa
-  1276801, // 17000 Pa
-  1313005, // 16000 Pa
-  1351089, // 15000 Pa
-  1391288, // 14000 Pa
-  1433883, // 13000 Pa
-  1479220, // 12000 Pa
-  1527727, // 11000 Pa
-  1579946, // 10000 Pa
-  1636581, // 9000 Pa
-  1698563, // 8000 Pa
-  1767172, // 7000 Pa
-  1844238, // 6000 Pa
-  1932517, // 5000 Pa
-  2036475, // 4000 Pa
-  2164148, // 3000 Pa
 };
 
 #endif //ALTITUDE_H
