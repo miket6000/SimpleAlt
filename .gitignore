@@ -17,6 +17,9 @@ _autosave-*
 *-save.kicad_pcb
 fp-info-cache
 
+# Log files
+*.csv
+
 # Build artifacts
 *.o
 *.bin

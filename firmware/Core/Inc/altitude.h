@@ -2,10 +2,15 @@
 #define ALTITUDE_H
 
 #define MIN_PRESSURE 20000
-#define MAX_PRESSURE 103000
+#define MAX_PRESSURE 108000
 #define PRESSURE_STEP 1000
 
 const int32_t altitude_lut[] = {
+  -54148, // 108000 Pa
+  -46211, // 107000 Pa
+  -38215, // 106000 Pa
+  -30157, // 105000 Pa
+  -22036, // 104000 Pa
   -13853, // 103000 Pa
   -5604, // 102000 Pa
   2709, // 101000 Pa

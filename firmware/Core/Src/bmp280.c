@@ -11,13 +11,17 @@ static BMPCalibrationData cal;
 static uint32_t pressure;
 static int32_t temperature;
 static int32_t altitude;
-static uint16_t velocity;
 static uint8_t spi_rx_buffer[26];
 
 /* Private functions prototypes */
 static void bmp_get_calibration(void);
 static int32_t bmp280_compensate_T_int32(int32_t adc_T);
 static uint32_t bmp280_compensate_P_int32(int32_t adc_P);
+
+void bmp_reset(void) {
+  uint8_t reset = 0xB6;
+  spi_write_address(bmp_cs, BMP_RESET & ~0x80, &reset, 1); 
+}
 
 /* Function definitions */
 void bmp_init(GPIO_TypeDef *port, uint16_t pin) {

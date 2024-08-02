@@ -20,6 +20,7 @@
 
 #include "main.h"
 #include "w25qxx.h"
+#include "spi.h"
 #include <string.h>
 
 #ifdef DEBUG
@@ -75,6 +76,13 @@ W25QXX_result_t w25qxx_receive(W25QXX_HandleTypeDef *w25qxx, uint8_t *buf, uint3
         ret = W25QXX_Ok;
     }
     return ret;
+}
+
+void w25qxx_sleep(W25QXX_HandleTypeDef *w25qxx) {
+  uint8_t sleep = 0xB9;
+  cs_on(w25qxx);
+  w25qxx_transmit(w25qxx, &sleep, 1);
+  cs_off(w25qxx);
 }
 
 uint32_t w25qxx_read_id(W25QXX_HandleTypeDef *w25qxx) {

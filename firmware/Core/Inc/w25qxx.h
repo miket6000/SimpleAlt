@@ -61,6 +61,7 @@ typedef enum {
     W25QXX_Timeout // 2
 } W25QXX_result_t;
 
+void w25qxx_sleep(W25QXX_HandleTypeDef *w25qxx);
 #ifdef W25QXX_QSPI
 W25QXX_result_t w25qxx_init(W25QXX_HandleTypeDef *w25qxx, QSPI_HandleTypeDef *qhspi);
 #else

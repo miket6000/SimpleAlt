@@ -46,7 +46,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define REFRESH_MS  20
+#define REFRESH_MS  (20 / 10)
 #define ALT_RING_BUF_LEN  20
 #define SAMPLE_DIFFERENCE  10
 #define LAUNCH_SPEED_KMPH  50
@@ -67,8 +67,6 @@
 uint8_t sleep = SNOOZE;
 uint8_t refresh_time = REFRESH_MS;
 
-bool recording = false;
-
 extern USBD_HandleTypeDef hUsbDeviceFS;
 extern uint8_t UserRxBufferFS[APP_RX_DATA_SIZE];
 extern uint8_t UserTxBufferFS[APP_TX_DATA_SIZE];
@@ -84,7 +82,7 @@ uint32_t next_free_address = 0;
 
 
 const int8_t idle_sequence[] = {1, PAUSE, -2};
-const int8_t usb_sequence[] = {0, -2};
+const int8_t usb_sequence[] = {0, -1};
 const int8_t recording_sequence[] = {2, SHORT_PAUSE, -2}; 
 
 //const int8_t voltage_sequence[] = {1, 2, 3, PAUSE, -1};
@@ -108,7 +106,7 @@ void USB_Disconnect(void);
 void print(char *tx_buffer, uint16_t len);
 void led_blink(void);
 //measure_battery_voltage();
-void read_button(void);
+uint8_t read_button(void);
 
 /* USER CODE END PFP */
 
@@ -131,6 +129,13 @@ void print_temperature() {
   itoa(bmp_get_temperature(), buffer, 10);
   print(buffer, strlen(buffer));
 }
+
+void print_voltage() {
+  char buffer[8];
+  itoa(get_battery_voltage(), buffer, 10);
+  print(buffer, strlen(buffer));
+}
+
 
 void print(char *tx_buffer, uint16_t len) {
   memcpy(&UserTxBufferFS[tx_buffer_index], tx_buffer, len);
@@ -209,14 +214,13 @@ void read_flash_binary() {
   uint32_t address;
   uint8_t len;
   uint8_t buffer[64];
-  char str_buf[3] = {0};
   
   address = atoi(cmd_get_param());
   len = atoi(cmd_get_param());
 
-  if (len > 0 && <= sizeof(buffer)) {
+  if (len > 0 && len <= sizeof(buffer)) {
     w25qxx_read(&w25qxx, address, buffer, len);
-    print(buffer, len);
+    print((char *)buffer, len);
   }
 }
 
@@ -245,11 +249,9 @@ void close_flash() {
 }
 
 void save(char label, uint8_t *data, uint16_t len) {
-  if (recording) {
-    w25qxx_write(&w25qxx, next_free_address, (uint8_t *)&label, 1);
-    w25qxx_write(&w25qxx, next_free_address+1, data, len);
-    next_free_address += (len + 1);
-  }
+  w25qxx_write(&w25qxx, next_free_address, (uint8_t *)&label, 1);
+  w25qxx_write(&w25qxx, next_free_address+1, data, len);
+  next_free_address += (len + 1);
 }
 
 /* USER CODE END 0 */
@@ -264,6 +266,10 @@ int main(void)
   /* USER CODE BEGIN 1 */
   static uint32_t tick = 0;
   static uint32_t last_tick = 0;
+  static int32_t max_altitude = 0;
+  static int32_t ground_altitude = 0;
+  static bool recording = false;
+  int32_t altitude_above_ground = 0;
 
   /* USER CODE END 1 */
 
@@ -280,7 +286,7 @@ int main(void)
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
-
+  HAL_SYSTICK_Config(HAL_RCC_GetHCLKFreq()/100);
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
@@ -292,34 +298,14 @@ int main(void)
   MX_TIM16_Init();
   /* USER CODE BEGIN 2 */
 
-  /* Setup GPIO to sensible "Power On" states */
-  HAL_GPIO_WritePin(SHUTDOWN_GPIO_Port, SHUTDOWN_Pin, GPIO_PIN_RESET);
-  HAL_GPIO_WritePin(CHARGE_EN_GPIO_Port, CHARGE_EN_Pin, GPIO_PIN_SET);
-  HAL_GPIO_WritePin(BMP_CS_GPIO_Port, BMP_CS_Pin, GPIO_PIN_SET);
-  HAL_GPIO_WritePin(FLASH_CS_GPIO_Port, FLASH_CS_Pin, GPIO_PIN_SET);
-  HAL_GPIO_WritePin(nSENSE_EN_GPIO_Port, nSENSE_EN_Pin, GPIO_PIN_SET);
-  
   bmp_init(BMP_CS_GPIO_Port, BMP_CS_Pin);
-  //uint8_t mfg_id = w25q_init(FLASH_CS_GPIO_Port, FLASH_CS_Pin);
-
-  W25QXX_result_t res;
-  res = w25qxx_init(&w25qxx, &hspi1, FLASH_CS_GPIO_Port, FLASH_CS_Pin); 
-
-  /* The below is used to verify that we can talk to the flash chip.
-  uint8_t tmp[] = "SPI:            \n";
-  HAL_Delay(5000);
-  itoa(mfg_id, (char *)&tmp[4],10);
-  CDC_Transmit_FS(tmp, sizeof(txBuffer));
-  */
+  w25qxx_init(&w25qxx, &hspi1, FLASH_CS_GPIO_Port, FLASH_CS_Pin); 
 
   // Calibrate The ADC On Power-Up For Better Accuracy
   HAL_ADCEx_Calibration_Start(&hadc);
-
-  /* Enable timer interrupt for LED and button timing */
-  HAL_TIM_Base_Start_IT(&htim16);
-
+  voltage = 3921;
   // flash out the voltage
-  //led_add_sequence(voltage_sequence);
+  led_add_number_sequence(voltage);
   // and the last altitude
   //led_add_sequence(altitude_sequence);
   // and got to idle blink
@@ -328,10 +314,10 @@ int main(void)
   cmd_add("P", print_pressure); 
   cmd_add("T", print_temperature); 
   cmd_add("A", print_altitude); 
+  cmd_add("V", print_voltage);
   cmd_add("ERASE", erase_flash);
   cmd_add("I", cmd_set_interactive);
   cmd_add("i", cmd_unset_interactive);
-  //cmd_add("S", set_param);
 //  cmd_add("RR", read_register);
 //  cmd_add("W", write_flash);
   cmd_add("R", read_flash);
@@ -341,7 +327,7 @@ int main(void)
 
   //1 second delay to give the user time to release the power on button. 
   //This prevents us detecting the release as a seperate event later on.
-  HAL_Delay(1000);
+  HAL_Delay(100);
 
   /* USER CODE END 2 */
 
@@ -360,21 +346,52 @@ int main(void)
       /* non-reentrant timer based function calls */
       led_blink();
       measure_battery_voltage();
-      read_button();
-    
+
+      switch (read_button()) {
+        case 3:
+          sleep = SHUTDOWN;
+          break;
+        case 2:
+          sleep = SLEEP;
+          break;
+        case 1:
+          if (recording) {
+            recording = false;
+            led_add_number_sequence((uint16_t)(max_altitude / 100));
+            close_flash();
+          } else {
+            recording = true;
+            ground_altitude = altitude;
+            max_altitude = 0;
+            led_add_sequence(recording_sequence);
+            open_flash();
+          }
+          break;
+        default:
+          break;
+      }    
+
       /* measurements */
       voltage = get_battery_voltage();
       temperature = bmp_get_temperature();
       pressure = bmp_get_pressure();
       altitude = bmp_get_altitude();    
-     
       
+      altitude_above_ground = altitude - ground_altitude;
+      
+      if (altitude_above_ground > max_altitude) {
+        max_altitude = altitude_above_ground;
+      }
+
+
       /* don't do this too often, it'll fill the flash pretty quick (400k samples total)
        * before saving we need to "open" the flash, and if we don't close when we're 
        * done we'll corrupt the filesystem.
        */
-      //save("P", &pressure, 4);
-      save('A', (uint8_t *)&altitude, 4);
+      if (recording) {
+        //save("P", &pressure, 4);
+        save('A', (uint8_t *)&altitude_above_ground, 4);
+      }
 
 
 
@@ -462,30 +479,23 @@ uint8_t get_button_state(void) {
   return HAL_GPIO_ReadPin(BUTTON_GPIO_Port, BUTTON_Pin);
 }
 
-void read_button() {
+uint8_t read_button() {
   static uint16_t button_counter = 0;
+  uint8_t button_result = 0;
 
   if (get_button_state()) {
     button_counter++;
   } else {
     if (button_counter > 250) {
-      sleep = SHUTDOWN;  // 5 seconds = shutdown, need USB to wake, lowest power
+      button_result = 3;
     } else if (button_counter > 100) {
-      sleep = SLEEP;  // 2 seconds = sleep, wake up by pressing button again
+      button_result = 2;
     } else if (button_counter > 2) {
-      if (recording) {  // debounced press = toggle recording state
-        recording = false;
-        led_add_sequence(idle_sequence);
-        close_flash();
-      } else {
-        recording = true;
-        led_add_sequence(recording_sequence);
-        open_flash();
-      }
+      button_result = 1;
     }
-
     button_counter = 0;
   }
+  return button_result;
 }  
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)

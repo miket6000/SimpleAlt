@@ -36,7 +36,7 @@ static const uint32_t codes[] = {
 
 static void step_sequencer(void);
 
-void led(LedState state) {
+void led(const LedState state) {
   switch (state) {
     case ON:
       HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
@@ -49,6 +49,22 @@ void led(LedState state) {
       break;
   }
 }
+
+void led_add_number_sequence(const uint16_t number) {
+  int8_t s[] = {NOTHING, NOTHING, NOTHING, NOTHING, PAUSE, -5};
+  if (number / 1000 > 0) {
+    s[0] = number / 1000;
+  }
+  if (number / 100 > 0) {
+    s[1] = (number - (1000 * s[0])) / 100;
+  }
+  if (number / 10 > 0) {
+    s[2] = (number - (1000 * s[0]) - (100 * s[1])) / 10;
+  }
+  s[3] = (number - (1000 * s[0]) - (100 * s[1]) - (10 * s[2]));
+  led_add_sequence(s);
+}
+
 
 void led_add_sequence(const int8_t *const new_sequence) {
   uint8_t i = 0;

@@ -43,6 +43,7 @@ typedef struct {
   int16_t dig_P9;
 } BMPCalibrationData;
 
+void bmp_reset(void);
 void bmp_init(GPIO_TypeDef *port, uint16_t pin);
 int32_t bmp_get_temperature(void);
 uint32_t bmp_get_pressure(void);
