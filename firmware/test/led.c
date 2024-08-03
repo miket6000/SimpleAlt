@@ -1,17 +1,16 @@
 #include "led.h"
 #include "gpio.h"
-#include <stdio.h>
 
 #define MAX_BLINK (32 / 2 - 1)
 #define LED_MASK 0x01
 #define VALID_MASK 0x02
 
 /* Sequencer state variables */
-uint8_t sequence_index = 0;
-uint8_t blink_index = 0;
-uint8_t blink_off_counter = BLINK_OFF_TIME;
-uint8_t sequence_head = 0;
-int8_t sequence[SEQUENCE_LEN] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+static uint8_t sequence_index = 0;
+static uint8_t blink_index = 0;
+static uint8_t blink_off_counter = BLINK_OFF_TIME;
+static uint8_t sequence_head = 0;
+static int8_t sequence[SEQUENCE_LEN] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
 
 /* Seqence codes are read right to left, two bits at a time. The first bit of each pair
  * indicates that this code is still valid. The second bit indicates whether the LED is 
@@ -19,7 +18,7 @@ int8_t sequence[SEQUENCE_LEN] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
  * LEDs are on for 1 sub-cycle, then off for BLINK_OFF_TIME sub-cycles. 
  * Cycle length is determined by time between calls to Led_Blink().
  */
-uint32_t codes[] = {  
+static const uint32_t codes[] = {  
   0x0AAFFFFF, //0
   0x000000AB, //1
   0x000002AF, //2
@@ -35,9 +34,9 @@ uint32_t codes[] = {
   0x00000000  //NOTHING
 };
 
-void step_sequencer(void);
+static void step_sequencer(void);
 
-void Led(led_state_t state) {
+void led(const LedState state) {
   switch (state) {
     case ON:
       HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
@@ -51,11 +50,32 @@ void Led(led_state_t state) {
   }
 }
 
-void Led_Sequence(int8_t *new_sequence) {
+void led_add_number_sequence(const uint16_t number) {
+  int8_t s[] = {NOTHING, NOTHING, NOTHING, NOTHING, PAUSE, -5};
+  uint16_t whole = 0;
+
+  if ((number / 1000) > 0) {
+    s[0] = number / 1000;
+    whole = s[0] * 1000;
+  }
+  if ((number / 100) > 0) {
+    s[1] = (number - whole) / 100;
+    whole = whole + s[1] * 100;
+  }
+  if ((number / 10) > 0) {
+    s[2] = (number - whole) / 10;
+    whole = whole + s[2] * 10;
+  }
+
+  s[3] = (number - whole);
+  led_add_sequence(s);
+}
+
+
+void led_add_sequence(const int8_t *const new_sequence) {
   uint8_t i = 0;
 
   while (new_sequence[i] >= 0) {
-    printf("ns[i] = %d", new_sequence[i]);
     sequence[sequence_head] = new_sequence[i];
     sequence_head++;
     sequence_head %= SEQUENCE_LEN;
@@ -64,16 +84,16 @@ void Led_Sequence(int8_t *new_sequence) {
   sequence[sequence_head] = new_sequence[i];
 }
 
-void Led_Blink() {
+void led_blink(void) {
   uint8_t blink;
 
   if (blink_off_counter == 0) {
     blink = (codes[sequence[sequence_index]] >> (2 * blink_index)) & 0x00000003;
     
     if (blink & LED_MASK) {
-      Led(ON);
+      led(ON);
     } else {
-      Led(OFF);
+      led(OFF);
     } 
 
     if ((blink & VALID_MASK) && (blink_index <= MAX_BLINK)) {
@@ -85,12 +105,12 @@ void Led_Blink() {
     
     blink_off_counter = BLINK_OFF_TIME;
   } else {
-    Led(OFF);
+    led(OFF);
     blink_off_counter--;
   }
 }
 
-void step_sequencer() {
+static void step_sequencer() {
   sequence_index++;
   if (sequence_index >= SEQUENCE_LEN) {
     sequence_index = 0;

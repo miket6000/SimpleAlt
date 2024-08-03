@@ -15,9 +15,10 @@ typedef enum {
   OFF, 
   ON, 
   TOGGLE
-} led_state_t;
+} LedState;
 
-void Led(led_state_t state);
-void Led_Sequence(int8_t *seq);
-void Led_Blink();
+void led(const LedState state);
+void led_add_number_sequence(const uint16_t number);
+void led_add_sequence(const int8_t *const seq);
+void led_blink();
 #endif

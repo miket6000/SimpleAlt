@@ -3,9 +3,9 @@
 #include "altitude.h"
 #include <stdio.h>
 
-//#define TEST_LED
+#define TEST_LED
 //#define TEST_COMMAND
-#define TEST_ALTITUDE
+//#define TEST_ALTITUDE
 
 
 int32_t altitude = 0;
@@ -51,11 +51,11 @@ void print(char *buf, uint16_t len) {
 
 int main(void) {
 #ifdef TEST_LED
-  int8_t seq[] = {2, 3, PAUSE,-1}; 
-  Led_Sequence(seq);
-   
+  int8_t seq[] = {1, SHORT_PAUSE,-2}; 
+  led_add_sequence(seq);
+  led_add_number_sequence(235);
   for(int i = 0; i < 2000; i++) {
-    Led_Blink();
+    led_blink();
   }
 #endif //TEST_LED
 

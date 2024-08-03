@@ -52,16 +52,22 @@ void led(const LedState state) {
 
 void led_add_number_sequence(const uint16_t number) {
   int8_t s[] = {NOTHING, NOTHING, NOTHING, NOTHING, PAUSE, -5};
-  if (number / 1000 > 0) {
+  uint16_t whole = 0;
+
+  if ((number / 1000) > 0) {
     s[0] = number / 1000;
+    whole = s[0] * 1000;
   }
-  if (number / 100 > 0) {
-    s[1] = (number - (1000 * s[0])) / 100;
+  if ((number / 100) > 0) {
+    s[1] = (number - whole) / 100;
+    whole = whole + s[1] * 100;
   }
-  if (number / 10 > 0) {
-    s[2] = (number - (1000 * s[0]) - (100 * s[1])) / 10;
+  if ((number / 10) > 0) {
+    s[2] = (number - whole) / 10;
+    whole = whole + s[2] * 10;
   }
-  s[3] = (number - (1000 * s[0]) - (100 * s[1]) - (10 * s[2]));
+
+  s[3] = (number - whole);
   led_add_sequence(s);
 }
 

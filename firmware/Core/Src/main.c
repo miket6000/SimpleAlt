@@ -390,7 +390,7 @@ int main(void)
        */
       if (recording) {
         //save("P", &pressure, 4);
-        save('A', (uint8_t *)&altitude_above_ground, 4);
+        save('A', (uint8_t *)&altitude, 4);
       }
 
 
