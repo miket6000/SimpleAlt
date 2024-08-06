@@ -7,6 +7,7 @@ import time
 port = '/dev/ttyACM0'
 now = datetime.now()
 sample_rate = 0.02
+ground_level = 0
 
 offset = 0x10000
 addresses = [offset]
@@ -40,9 +41,11 @@ with serial.Serial(port, timeout=1) as ser:
         if (a != 0xffffffff):
             addresses.append(a)
             duration = (addresses[i] - addresses[i-1]) / record_length * sample_rate
-            print(f"  [{i}] - duration {duration} seconds")
+            print(f"  [{i}] \tduration {duration} seconds")
 
-    input_str = input("\nWhich would you like to export?\n> ")
+
+    print(f"\nThese flights use up {addresses[-1] / 2**24 * 100:.2f}% of the available flash\n")
+    input_str = input("Which would you like to export?\n> ")
     try:
         start_address = addresses[int(input_str) - 1]
         end_address = addresses[int(input_str)] - 1
@@ -57,18 +60,25 @@ with serial.Serial(port, timeout=1) as ser:
         ser.write(f"r {i} {bytes_to_read}\n".encode())
         for r in range(num_records):
             label = chr(int.from_bytes(ser.read(1)))
-            if (label == 'A'):
-                altitude = int.from_bytes(ser.read(4), byteorder="little", signed=True) / 100
-                data.append((t, altitude))
+            if (label == 'A'): 
+                altitude = int.from_bytes(ser.read(4), byteorder="little", signed=True) / 100 
+                # assume the first entry is "ground"
+                if (i == start_address and r == 0): 
+                    ground_level = 0 #altitude
+                
+                data.append([t, altitude - ground_level])
                 t += sample_rate
-
 
 print(f"Read {len(data)} records in {time.time() - start_time:.1f} seconds")
 filename = f"SimpleAlt_flight_{input_str}_{now.strftime('%Y%m%d_%H%M%S')}.csv"
 
+csv_data = [["Time", "Altitude"]]
+
+for record in data:
+    csv_data.append([f"{record[0]:.2f}", f"{record[1]:.2f}"])
+
 with open(filename, 'w', newline='') as out:
     csv_out = csv.writer(out)
-    csv_out.writerow(['Time','Value'])
-    csv_out.writerows(data)
+    csv_out.writerows(csv_data)
 
 print(f"File saved as {filename}")
