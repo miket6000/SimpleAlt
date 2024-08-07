@@ -81,6 +81,7 @@ Core/Src/spi_wrapper.c \
 Core/Src/bmp280.c \
 Core/Src/w25qxx.c \
 Core/Src/command.c \
+Core/Src/button.c \
 USB_DEVICE/App/usbd_cdc_if.c \
 Middlewares/ST/STM32_USB_Device_Library/Class/CDC/Src/usbd_cdc.c
 

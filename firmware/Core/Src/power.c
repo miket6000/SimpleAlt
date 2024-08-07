@@ -26,7 +26,6 @@ void power_down(PowerLevel level) {
       HAL_PWR_EnterSTANDBYMode();
       break;
     case SHUTDOWN:
-      led(ON);
       HAL_GPIO_WritePin(SHUTDOWN_GPIO_Port, SHUTDOWN_Pin, GPIO_PIN_SET);
       break;
     default:

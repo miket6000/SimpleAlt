@@ -19,11 +19,11 @@ static int8_t sequence[SEQUENCE_LEN] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
  * Cycle length is determined by time between calls to Led_Blink().
  */
 static const uint32_t codes[] = {  
-  0x0AAFFFFF, //0
-  0x000000AB, //1
-  0x000002AF, //2
-  0x00000ABF, //3
-  0x00002AFF, //4
+  0x02AFFFFF, //0
+  0x000000AB, //1 0000000010101011
+  0x000002AF, //2 0000001010101111
+  0x00000ABF, //3 0000101010111111
+  0x00002AFF, //4 0010101011111111
   0x0000ABFF, //5
   0x0002AFFF, //6
   0x000ABFFF, //7
@@ -48,6 +48,13 @@ void led(const LedState state) {
       HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
       break;
   }
+}
+
+void led_reset_sequence(void) {
+  sequence_index = 0;
+  blink_index = 0;
+  blink_off_counter = BLINK_OFF_TIME;
+  sequence_head = 0;
 }
 
 void led_add_number_sequence(const uint16_t number) {

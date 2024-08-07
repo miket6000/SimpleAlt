@@ -35,7 +35,7 @@
 #include "bmp280.h"
 #include "w25qxx.h"
 #include "command.h"
-
+#include "button.h"
 
 /* USER CODE END Includes */
 
@@ -74,25 +74,15 @@ uint8_t rx_buffer[APP_RX_DATA_SIZE];
 uint16_t tx_buffer_index = 0;
 uint16_t rx_buffer_index = 0;
 
-
 W25QXX_HandleTypeDef w25qxx; // Handler for all w25qxx operations! 
 uint32_t next_free_index_slot = 0;
 uint32_t next_free_address = 0;
 
-
-
 const int8_t idle_sequence[] = {1, PAUSE, -2};
 const int8_t usb_sequence[] = {0, -1};
-const int8_t recording_sequence[] = {2, SHORT_PAUSE, -2}; 
+const int8_t recording_sequence[] = {1, 2, -2}; 
+const int8_t button_sequence[] = {1, 2, 3, PAUSE, -1};
 
-//const int8_t voltage_sequence[] = {1, 2, 3, PAUSE, -1};
-//const int8_t altitude_sequence[] = {3, 5, 7, 0, PAUSE, -1};
-
-
-int16_t temperature = 0;
-uint32_t pressure = 101325;
-uint16_t voltage = 0;
-int32_t altitude = 0;
 
 /* USER CODE END PV */
 
@@ -142,19 +132,6 @@ void print(char *tx_buffer, uint16_t len) {
   tx_buffer_index += len;
 }
 
-void read_register() {
-  uint32_t address = 0;
-  uint8_t data = 0;
-  char str_buf[3] = {0};
-  
-  address = atoi(cmd_get_param());
-
-  if (address > 0) {
-    //data = w25q_read_register(address);
-    print(itoa(data, str_buf, 16), strlen(str_buf));
-  }
-}
-
 void write_flash() {
   char* param;
   uint32_t address = 0;
@@ -173,9 +150,6 @@ void write_flash() {
   }
 
   if (len > 0) {
-    //w25q_write_enable();
-    //HAL_Delay(5);
-    //w25q_write(address, data, len);
     w25qxx_write(&w25qxx, address, data, len);
     print("OK", 3);
   } else {
@@ -264,12 +238,19 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-  static uint32_t tick = 0;
-  static uint32_t last_tick = 0;
-  static int32_t max_altitude = 0;
-  static int32_t ground_altitude = 0;
-  static bool recording = false;
+  uint32_t tick = 0;
+  uint32_t last_tick = 0;
+  bool recording = false;
+  
+  int32_t altitude = 0;
+  int32_t ground_altitude = 0;
   int32_t altitude_above_ground = 0;
+  int32_t max_altitude = 0;
+  
+  int16_t temperature = 0;
+  uint32_t pressure = 101325;
+  uint16_t voltage = 0;
+
 
   /* USER CODE END 1 */
 
@@ -286,6 +267,7 @@ int main(void)
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
+  // Set tick to be 10ms
   HAL_SYSTICK_Config(HAL_RCC_GetHCLKFreq()/100);
   /* USER CODE END SysInit */
 
@@ -300,17 +282,12 @@ int main(void)
 
   bmp_init(BMP_CS_GPIO_Port, BMP_CS_Pin);
   w25qxx_init(&w25qxx, &hspi1, FLASH_CS_GPIO_Port, FLASH_CS_Pin); 
-
+  
   // Calibrate The ADC On Power-Up For Better Accuracy
   HAL_ADCEx_Calibration_Start(&hadc);
-  voltage = 3921;
-  // flash out the voltage
-  led_add_number_sequence(voltage);
-  // and the last altitude
-  //led_add_sequence(altitude_sequence);
-  // and got to idle blink
+  
   led_add_sequence(idle_sequence);
-  //cmd_add("LED_ON", led_on);
+ 
   cmd_add("P", print_pressure); 
   cmd_add("T", print_temperature); 
   cmd_add("A", print_altitude); 
@@ -318,8 +295,6 @@ int main(void)
   cmd_add("ERASE", erase_flash);
   cmd_add("I", cmd_set_interactive);
   cmd_add("i", cmd_unset_interactive);
-//  cmd_add("RR", read_register);
-//  cmd_add("W", write_flash);
   cmd_add("R", read_flash);
   cmd_add("r", read_flash_binary);
   
@@ -331,6 +306,10 @@ int main(void)
 
   /* USER CODE END 2 */
 
+  uint8_t state = 0; // 0 = idle, 1 = recording 
+  uint8_t last_state = 0;
+  ButtonState button_state = BUTTON_IDLE;
+
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1) {
@@ -340,60 +319,91 @@ int main(void)
 
     tick = HAL_GetTick();
     if ((tick - last_tick) >= refresh_time) {
-      /* Make measurements */
       last_tick = tick;
 
-      /* non-reentrant timer based function calls */
+      /* Non-reentrant timer based function calls */
       led_blink();
       measure_battery_voltage();
+      button_state = button_get_state();
 
-      switch (read_button()) {
-        case 3:
-          sleep = SHUTDOWN;
-          break;
-        case 2:
-          sleep = SLEEP;
-          break;
-        case 1:
-          if (recording) {
-            recording = false;
-            led_add_number_sequence((uint16_t)(max_altitude / 100));
-            close_flash();
-          } else {
-            recording = true;
-            ground_altitude = altitude;
-            max_altitude = 0;
-            led_add_sequence(recording_sequence);
-            open_flash();
-          }
-          break;
-        default:
-          break;
-      }    
 
-      /* measurements */
+      /* Measurements */
       voltage = get_battery_voltage();
       temperature = bmp_get_temperature();
       pressure = bmp_get_pressure();
       altitude = bmp_get_altitude();    
       
       altitude_above_ground = altitude - ground_altitude;
-      
       if (altitude_above_ground > max_altitude) {
         max_altitude = altitude_above_ground;
       }
 
+      /* State specific behaviour and transitions */
+      switch (state) {
+        case 0: // idle
+          if (last_state != 0) {
+            if (last_state == 1) {
+              led_reset_sequence();
+              if (max_altitude > 100) {
+                led_add_number_sequence(max_altitude / 100);
+              } else {
+                led_add_sequence(idle_sequence);
+              }
+              close_flash();
+            } else {
+              led_reset_sequence();
+              led_add_sequence(idle_sequence);
+            }
+          }
+          last_state = state;
+          if (button_state == BUTTON_RELEASE_1) {
+            state = 1;
+          } else if (button_state == BUTTON_RELEASE_0) {
+            led_reset_sequence();
+            led_add_sequence(idle_sequence);
+          }
+          break;
+        case 1: // recording
+          if (last_state != 1) { // on entry
+            led_reset_sequence();
+            led_add_sequence(recording_sequence);
+            ground_altitude = altitude;
+            max_altitude = 0;
+            open_flash();
+          }
+          last_state = state;
+          save('A', (uint8_t *)&altitude, 4);
+          if (button_state == BUTTON_RELEASE_1) {
+            state = 0;
+          } else if (button_state == BUTTON_RELEASE_0) {
+            led_reset_sequence();
+            led_add_sequence(recording_sequence);
+          }
 
-      /* don't do this too often, it'll fill the flash pretty quick (400k samples total)
-       * before saving we need to "open" the flash, and if we don't close when we're 
-       * done we'll corrupt the filesystem.
-       */
-      if (recording) {
-        //save("P", &pressure, 4);
-        save('A', (uint8_t *)&altitude, 4);
+          break;
       }
 
 
+      /* This button behaviour is independant of state */
+      switch (button_state) {
+        case BUTTON_DOWN:
+          led_reset_sequence();
+          led_add_sequence(button_sequence);
+        case BUTTON_HELD: // do nothing
+          break; 
+        case BUTTON_RELEASE_0: // handled in state machine code
+          break;
+        case BUTTON_RELEASE_1: // handled in state machine code
+          break;
+        case BUTTON_RELEASE_2:
+          sleep = SLEEP;
+          break;
+        case BUTTON_RELEASE_3:
+          sleep = SHUTDOWN;
+          break;
+        case BUTTON_IDLE: // do nothing
+          break;
+      }
 
       /* Deal with data recieved via USB */
       if (rx_buffer_index > 0) {
@@ -474,29 +484,6 @@ void USB_Connect(void) {
 void USB_Disconnect(void) {
   //Led_Sequence(idle_sequence);
 }
-
-uint8_t get_button_state(void) {
-  return HAL_GPIO_ReadPin(BUTTON_GPIO_Port, BUTTON_Pin);
-}
-
-uint8_t read_button() {
-  static uint16_t button_counter = 0;
-  uint8_t button_result = 0;
-
-  if (get_button_state()) {
-    button_counter++;
-  } else {
-    if (button_counter > 250) {
-      button_result = 3;
-    } else if (button_counter > 100) {
-      button_result = 2;
-    } else if (button_counter > 2) {
-      button_result = 1;
-    }
-    button_counter = 0;
-  }
-  return button_result;
-}  
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
