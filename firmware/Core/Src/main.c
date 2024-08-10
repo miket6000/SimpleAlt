@@ -276,7 +276,6 @@ int main(void)
   MX_ADC_Init();
   MX_SPI1_Init();
   MX_USB_DEVICE_Init();
-  MX_TIM16_Init();
   /* USER CODE BEGIN 2 */
 
   bmp_init(BMP_CS_GPIO_Port, BMP_CS_Pin);
@@ -405,19 +404,19 @@ int main(void)
       }
     }
 
-      /* Deal with data recieved via USB */
-      if (rx_buffer_index > 0) {
-        sleep = AWAKE; //Dirty hack, move this to onConnect and revert in onDisconnect
-        cmd_read_input((char *)rx_buffer, rx_buffer_index);
-        rx_buffer_index = 0;
+    /* Deal with data recieved via USB */
+    if (rx_buffer_index > 0) {
+      sleep = AWAKE; //Dirty hack, move this to onConnect and revert in onDisconnect
+      cmd_read_input((char *)rx_buffer, rx_buffer_index);
+      rx_buffer_index = 0;
+    }
+  
+    /* Transmit any data in the output buffer */
+    if (tx_buffer_index > 0) {
+      if (CDC_Transmit_FS(UserTxBufferFS, tx_buffer_index) == USBD_OK) {
+        tx_buffer_index = 0;
       }
-    
-      /* Transmit any data in the output buffer */
-      if (tx_buffer_index > 0) {
-        if (CDC_Transmit_FS(UserTxBufferFS, tx_buffer_index) == USBD_OK) {
-          tx_buffer_index = 0;
-        }
-      }
+    }
    
     // Pause execution until woken by an interrupt.
     // The systick will do this for us every ms if we're in normal mode.
@@ -483,15 +482,8 @@ void USB_Connect(void) {
 
 void USB_Disconnect(void) {
   //Led_Sequence(idle_sequence);
+  //sleep = SNOOZE;
 }
-
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-{
-  // Check which version of the timer triggered this callback and toggle LED
-  if (htim == &htim16) {
-  }
-}
-
 
 /* USER CODE END 4 */
 
