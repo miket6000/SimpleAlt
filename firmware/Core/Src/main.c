@@ -240,7 +240,6 @@ int main(void)
   /* USER CODE BEGIN 1 */
   uint32_t tick = 0;
   uint32_t last_tick = 0;
-  bool recording = false;
   
   int32_t altitude = 0;
   int32_t ground_altitude = 0;
@@ -404,9 +403,11 @@ int main(void)
         case BUTTON_IDLE: // do nothing
           break;
       }
+    }
 
       /* Deal with data recieved via USB */
       if (rx_buffer_index > 0) {
+        sleep = AWAKE; //Dirty hack, move this to onConnect and revert in onDisconnect
         cmd_read_input((char *)rx_buffer, rx_buffer_index);
         rx_buffer_index = 0;
       }
@@ -417,7 +418,6 @@ int main(void)
           tx_buffer_index = 0;
         }
       }
-    }
    
     // Pause execution until woken by an interrupt.
     // The systick will do this for us every ms if we're in normal mode.
