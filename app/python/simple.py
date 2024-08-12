@@ -41,10 +41,9 @@ with serial.Serial(port, timeout=1) as ser:
         if (a != 0xffffffff):
             addresses.append(a)
             duration = (addresses[i] - addresses[i-1]) / record_length * sample_rate
-            print(f"  [{i}] \tduration {duration} seconds")
+            print(f"  [{i}] \tduration {duration:.2f} seconds")
 
-
-    print(f"\nThese flights use up {addresses[-1] / 2**24 * 100:.2f}% of the available flash\n")
+    print(f"\nThese flights use up {addresses[-1] / 2**21 * 100:.2f}% of the available flash\n")
     input_str = input("Which would you like to export?\n> ")
     try:
         start_address = addresses[int(input_str) - 1]

@@ -7,6 +7,7 @@ class Recording {
   int startAddress = 0;
   int endAddress = 0;
   List <double> data = [];
+  double groundLevel = 0;
 
   Recording({required this.index, required this.startAddress, required this.endAddress});
 
@@ -17,6 +18,8 @@ class Recording {
   bool hasData() {
     return (data.isNotEmpty);
   }
+
+  List<double> get altitude => data.map((value) => value - groundLevel).toList();
 }
 
 class Altimeter {
@@ -55,6 +58,7 @@ class Altimeter {
   Recording fetchRecording(int index) {
     Uint8List command = Uint8List(16);
     var response = Uint8List(61);
+    double altitude;
     
     if (findAltimeter()) {
       if (index < recordings.length) {
@@ -63,12 +67,16 @@ class Altimeter {
           SerialPort sp = openPort(); 
           int address = recordings[index].startAddress;
           while(address < recordings[index].endAddress) {
-            command = Uint8List.fromList("r ${address} 60\n".codeUnits);
+            command = Uint8List.fromList("r $address 60\n".codeUnits);
             sp.write(command, timeout: 1000);
             response = sp.read(60, timeout: 4000);
             for(int i = 0; i < 60; i+=5) {
               if (address + i < recordings[index].endAddress) {
-                recordings[index].data.add(response.buffer.asByteData().getInt32(i + 1, Endian.little) / 100.0);          
+                altitude = response.buffer.asByteData().getInt32(i + 1, Endian.little) / 100.0; 
+                if (address + i == recordings[index].startAddress) {
+                  recordings[index].groundLevel = altitude;
+                }
+                recordings[index].data.add(altitude);          
               }
             }
             address += 60;

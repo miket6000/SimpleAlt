@@ -87,6 +87,25 @@ int altimeter_get_recording_length(const uint32_t recording) {
   return (addresses[recording + 1] - addresses[recording]) / RECORD_LENGTH;
 }
 
+int altimeter_get_data(uint8_t *buffer, const uint32_t start_address, const uint32_t end_address) {
+  uint32_t address = start_address;
+  uint32_t bytes_to_get = 0;
+  uint32_t buffer_address = 0;
+  while (address < end_address) {
+    bytes_to_get = end_address - address;
+    if (bytes_to_get > RECORD_ALIGNED_BUFFER_SIZE) {
+      bytes_to_get = RECORD_ALIGNED_BUFFER_SIZE;
+    }
+    
+    //printf("address: %i, end_address: %i, bytes_to_get: %i\n", address, end_address, bytes_to_get);
+
+    altimeter_get_block(&buffer[buffer_address], address, bytes_to_get);
+    buffer_address += bytes_to_get;
+    address += bytes_to_get;
+  }
+  return 0;
+}
+
 int altimeter_get_recording(int32_t *buffer, const uint32_t recording, const uint32_t len) {
   if (recording > num_addresses) {
     return (-1);
