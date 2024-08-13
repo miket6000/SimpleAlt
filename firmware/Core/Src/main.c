@@ -54,6 +54,9 @@
 
 #define DATA_OFFSET 0x10000LLU
 
+#define STATE_IDLE 0
+#define STATE_RECORDING 1
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -324,65 +327,7 @@ int main(void)
       measure_battery_voltage();
       button_state = button_get_state();
 
-
-      /* Measurements */
-      voltage = get_battery_voltage();
-      temperature = bmp_get_temperature();
-      pressure = bmp_get_pressure();
-      altitude = bmp_get_altitude();    
-      
-      altitude_above_ground = altitude - ground_altitude;
-      if (altitude_above_ground > max_altitude) {
-        max_altitude = altitude_above_ground;
-      }
-
-      /* State specific behaviour and transitions */
-      switch (state) {
-        case 0: // idle
-          if (last_state != 0) {
-            if (last_state == 1) {
-              led_reset_sequence();
-              if (max_altitude > 100) {
-                led_add_number_sequence(max_altitude / 100);
-              } else {
-                led_add_sequence(idle_sequence);
-              }
-              close_flash();
-            } else {
-              led_reset_sequence();
-              led_add_sequence(idle_sequence);
-            }
-          }
-          last_state = state;
-          if (button_state == BUTTON_RELEASE_1) {
-            state = 1;
-          } else if (button_state == BUTTON_RELEASE_0) {
-            led_reset_sequence();
-            led_add_sequence(idle_sequence);
-          }
-          break;
-        case 1: // recording
-          if (last_state != 1) { // on entry
-            led_reset_sequence();
-            led_add_sequence(recording_sequence);
-            ground_altitude = altitude;
-            max_altitude = 0;
-            open_flash();
-          }
-          last_state = state;
-          save('A', (uint8_t *)&altitude, 4);
-          if (button_state == BUTTON_RELEASE_1) {
-            state = 0;
-          } else if (button_state == BUTTON_RELEASE_0) {
-            led_reset_sequence();
-            led_add_sequence(recording_sequence);
-          }
-
-          break;
-      }
-
-
-      /* This button behaviour is independant of state */
+      /* check button presses */
       switch (button_state) {
         case BUTTON_DOWN:
           led_reset_sequence();
@@ -402,7 +347,79 @@ int main(void)
         case BUTTON_IDLE: // do nothing
           break;
       }
-    }
+
+      /* Measurements */
+      voltage = get_battery_voltage();
+      temperature = bmp_get_temperature();
+      pressure = bmp_get_pressure();
+      altitude = bmp_get_altitude();    
+      
+      altitude_above_ground = altitude - ground_altitude;
+      if (altitude_above_ground > max_altitude) {
+        max_altitude = altitude_above_ground;
+      }
+
+      /* State specific behaviour and transitions */
+      switch (state) {
+        case STATE_IDLE:
+          if (last_state != STATE_IDLE) {
+            if (last_state == STATE_RECORDING) { 
+              led_reset_sequence();
+              // minimum height increase to eliminate accidental press/cancel 
+              if (max_altitude > 100) {
+                led_add_number_sequence(max_altitude / 100);
+              } else {
+                led_add_sequence(idle_sequence);
+              }
+              close_flash(); // if we were recording, stop.
+            } else { // not sure how we got here, but lets do something sensible
+              led_reset_sequence();
+              led_add_sequence(idle_sequence);
+            }
+          }
+          
+          last_state = state;
+          
+          // ignore short press, proper press change to recording
+          if (button_state == BUTTON_RELEASE_0) {
+            led_reset_sequence();
+            led_add_sequence(idle_sequence);
+          } else if (button_state == BUTTON_RELEASE_1) {
+            state = STATE_RECORDING;
+          }
+          
+          break;
+        case STATE_RECORDING: // recording
+          if (last_state != STATE_RECORDING) { // on entry
+            led_reset_sequence();
+            led_add_sequence(recording_sequence);
+            ground_altitude = altitude;
+            max_altitude = 0;
+            open_flash();
+          }
+
+          last_state = state;
+
+          // save the data, we are recording after all
+          save('A', (uint8_t *)&altitude, 4);
+
+          // if we're about to shut down, ensure the flash is closed.
+          if (sleep == SLEEP || sleep == SHUTDOWN) {
+            close_flash(); 
+          }
+
+          // ignore short press, proper press change to idle
+          if (button_state == BUTTON_RELEASE_0) {
+            led_reset_sequence();
+            led_add_sequence(recording_sequence);
+          } else if (button_state == BUTTON_RELEASE_1) {
+            state = STATE_IDLE;
+          }
+          
+          break;
+      } // switch(state)
+
+    } // Tick > refresh time
 
     /* Deal with data recieved via USB */
     if (rx_buffer_index > 0) {
