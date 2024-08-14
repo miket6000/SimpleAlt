@@ -300,7 +300,7 @@ int main(void)
   uint8_t state = 0; // 0 = idle, 1 = recording 
   uint8_t last_state = 0;
   ButtonState button_state = BUTTON_IDLE;
-  uint32_t idle_timer = 0;
+  uint32_t idle_timer = IDLE_TIMEOUT;
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
