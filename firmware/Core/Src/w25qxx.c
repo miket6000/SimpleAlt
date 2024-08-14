@@ -85,6 +85,15 @@ void w25qxx_sleep(W25QXX_HandleTypeDef *w25qxx) {
   cs_off(w25qxx);
 }
 
+void w25qxx_wake(W25QXX_HandleTypeDef *w25qxx) {
+  uint8_t wake = 0xAB;
+  cs_on(w25qxx);
+  w25qxx_transmit(w25qxx, &wake, 1);
+  cs_off(w25qxx);
+}
+
+
+
 uint32_t w25qxx_read_id(W25QXX_HandleTypeDef *w25qxx) {
     uint32_t ret = 0;
     uint8_t buf[3];

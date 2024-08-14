@@ -273,6 +273,7 @@ int main(void)
 
   bmp_init(BMP_CS_GPIO_Port, BMP_CS_Pin);
   w25qxx_init(&w25qxx, &hspi1, FLASH_CS_GPIO_Port, FLASH_CS_Pin); 
+  w25qxx_wake(&w25qxx); // just in case we were recently asleep
   
   // Calibrate The ADC On Power-Up For Better Accuracy
   HAL_ADCEx_Calibration_Start(&hadc);
