@@ -2,6 +2,8 @@
 
 A simple barometer based peak and logging altimeter for model rocketry with USB C charging and data transfer.  
 
+![Render of SimpleAlt](docs/3d%20Render%20Top.png "render")
+
 ## Technical details
 
 SimpleAlt uses a Bosch BMP280 to measure the barometric altitude of the altimeter. When recording is started by pressing the button it takes a reference measurement which it calls "ground altitude". This is subtracted from the maximum altitude used in displaying the altitude achieved, however the raw barometric altitude is what is recorded onto the flash.  
@@ -16,7 +18,7 @@ Charging, battery protection and the LDO are all supplied by the STNS01.
 
 ## Using SimpleAlt
 
-SimpleAlt has a simple user interface consisting of a single button and a single green LED. This allows it to be as light as possible but may take some getting used to.  
+SimpleAlt has a simple user interface consisting of a single button and a single green LED (marked 's', for status). This allows it to be as light as possible but may take some getting used to.  
 
 To show how this works this document describes LED flashes between angled brackets <>. A number between the brackets indicates the number of times the LED will flash. A '.' indicates a short pause and a '-' indicates a long pause. e.g.  
 < 9 . 10 . 6 - >  
@@ -60,3 +62,4 @@ Hold the button until the double flash to put the altimeter back into sleep mode
 
 Back at a computer use the plug the SimpleAlt into your computer using a USB C cable and use the Simple application to download your flights. The flights are added onto the list in order that they occured and the application also gives you the duration of the flight (from starting to stopping the recording) to help you find the right flights to download. For more details see the app guide.  
 
+![A screenshot of the application showing the flight of an Estes Alpha III on a A8-3](docs/screenshot.png "App Screenshot")
