@@ -46,11 +46,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define REFRESH_MS  (20 / 10)
-#define ALT_RING_BUF_LEN  20
-#define SAMPLE_DIFFERENCE  10
-#define LAUNCH_SPEED_KMPH  50
-#define LAUNCH_THRESHOLD (LAUNCH_SPEED_KMPH * REFRESH_MS * SAMPLE_DIFFERENCE / 36)
+#define SECONDS_TO_TICKS(x) (x * 100);
+#define IDLE_TIMEOUT SECONDS_TO_TICKS(1200); 
 
 #define DATA_OFFSET 0x10000LLU
 
@@ -68,7 +65,7 @@
 
 /* USER CODE BEGIN PV */
 uint8_t sleep = SNOOZE;
-uint8_t refresh_time = REFRESH_MS;
+uint8_t refresh_time = SECONDS_TO_TICKS(0.02);
 
 extern USBD_HandleTypeDef hUsbDeviceFS;
 extern uint8_t UserRxBufferFS[APP_RX_DATA_SIZE];
@@ -135,6 +132,7 @@ void print(char *tx_buffer, uint16_t len) {
   tx_buffer_index += len;
 }
 
+// W address bytes
 void write_flash() {
   char* param;
   uint32_t address = 0;
@@ -147,6 +145,7 @@ void write_flash() {
   }
 
   param = cmd_get_param();
+  // WARNING NO CHECKS!!
   while (param != NULL) {
     data[len++] = atoi(param);
     param = cmd_get_param();
@@ -154,19 +153,10 @@ void write_flash() {
 
   if (len > 0) {
     w25qxx_write(&w25qxx, address, data, len);
-    print("OK", 3);
-  } else {
-    print("ERR", 4);
-  }
-
+  } 
 }
 
-
-/* Reads param2 bytes (max 16) from address param1 and sends to serial.
- * e.g. R 0 16 to read 16 bytes at address 0.
- * Possible optimisation is to remove the buffer and write straight into the USB buffer.
- * Would need a revamp of the "print" function and removal of the interactive mode.
- */
+// R address bytes
 void read_flash() {
   uint32_t address;
   uint8_t len;
@@ -187,6 +177,7 @@ void read_flash() {
   }
 }
 
+// r address bytes
 void read_flash_binary() {
   uint32_t address;
   uint8_t len;
@@ -202,9 +193,8 @@ void read_flash_binary() {
 }
 
 void erase_flash() {
-  print("Please wait...\n", 15);
   w25qxx_chip_erase(&w25qxx);
-  print("OK",2);
+  print("OK\n", 3);
 }
 
 void open_flash() {
@@ -310,6 +300,7 @@ int main(void)
   uint8_t state = 0; // 0 = idle, 1 = recording 
   uint8_t last_state = 0;
   ButtonState button_state = BUTTON_IDLE;
+  uint32_t idle_timer = 0;
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
@@ -335,8 +326,10 @@ int main(void)
         case BUTTON_HELD: // do nothing
           break; 
         case BUTTON_RELEASE_0: // handled in state machine code
+          idle_timer = IDLE_TIMEOUT;
           break;
         case BUTTON_RELEASE_1: // handled in state machine code
+          idle_timer = IDLE_TIMEOUT;
           break;
         case BUTTON_RELEASE_2:
           sleep = SLEEP;
@@ -346,6 +339,10 @@ int main(void)
           break;
         case BUTTON_IDLE: // do nothing
           break;
+      }
+
+      if (idle_timer-- == 0) {
+        sleep = SLEEP;
       }
 
       /* Measurements */
@@ -424,6 +421,7 @@ int main(void)
     /* Deal with data recieved via USB */
     if (rx_buffer_index > 0) {
       sleep = AWAKE; //Dirty hack, move this to onConnect and revert in onDisconnect
+      idle_timer = IDLE_TIMEOUT; //don't sleep if there's USB traffic.
       cmd_read_input((char *)rx_buffer, rx_buffer_index);
       rx_buffer_index = 0;
     }
@@ -494,12 +492,11 @@ void USBD_CDC_RxHandler(uint8_t *rxBuffer, uint32_t len) {
 }
 
 void USB_Connect(void) {
-  //Led_Sequence(usb_sequence);
+  // Doing anything at all in this function tends to result in the application faulting  
 }
 
 void USB_Disconnect(void) {
-  //Led_Sequence(idle_sequence);
-  //sleep = SNOOZE;
+  // Doing anything at all in this function tends to result in the application faulting
 }
 
 /* USER CODE END 4 */
