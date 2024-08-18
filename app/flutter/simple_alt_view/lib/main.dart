@@ -1,7 +1,11 @@
 import 'dart:developer';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:simple_alt_view/altimeter.dart';
+import 'package:simple_alt_view/altitude_chart.dart';
+import 'package:csv/csv.dart';
+import 'package:file_saver/file_saver.dart';
 
 void main() {
   runApp(const MyApp());
@@ -25,10 +29,6 @@ class MyApp extends StatelessWidget {
   }
 }
 
-void onSave(){
-  log("save button was pressed");
-}
-
 class MyHomePage extends StatefulWidget {
   const MyHomePage({super.key, required this.title});
   final String title;
@@ -37,12 +37,13 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
+  //final GlobalKey<_AltitudeChartState> _key = GlobalKey();
   final altimeter = Altimeter();
   List<Recording> recordingList = [];
   List<String> recordingStrings = [];
-  late Recording dropdownValue;
+  late Recording selectedRecording;
   late List<FlSpot> points;
-
+  bool loading = false;
 
   @override
   void initState() {
@@ -54,43 +55,48 @@ class _MyHomePageState extends State<MyHomePage> {
   void refreshLogList() {
     if (altimeter.findAltimeter()) {
       recordingList = altimeter.getRecordingList();
-      dropdownValue = recordingList.first;
+      selectedRecording = recordingList.first;
     } else {
-      dropdownValue = Recording(index: 0, startAddress: 0, endAddress: 0);
+      selectedRecording = Recording(index: 0, startAddress: 0, endAddress: 0);
     }
     setState(() { /* required to force update of dropdownMenu*/ });
   }
 
-  @override
-  Widget build(BuildContext context) {
-    LineChart altitudeChart = LineChart(
-      key: ValueKey(dropdownValue), //changing dropdownValue changes the key forcing an update on the next call to setState();
-      LineChartData(
-        //borderData: FlBorderData(border: const Border(bottom: BorderSide(), left: BorderSide())), 
-        lineBarsData: [
-          LineChartBarData(spots: points, dotData: const FlDotData(show: false,),)
-        ],
-        titlesData: const FlTitlesData(
-          topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-//          bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, interval: 20)),
-        ),
-        maxX: (points.length > 1 ? ((points.reduce((cur, next) => cur.x > next.x ? cur: next)).x / 10).ceil() * 10.0 : 0),
-        minY: (points.length > 1 ? ((points.reduce((cur, next) => cur.y < next.y ? cur: next)).y / 10).floor() * 10.0 : 0),
-        maxY: (points.length > 1 ? ((points.reduce((cur, next) => cur.y > next.y ? cur: next)).y / 10).ceil() * 10.0 : 0),
-        
+  void onSave() {
+    int recordingNumber = recordingList.indexOf(selectedRecording);
+    int suffix = 0;
+    String filename = "SimpleAlt_Flight_$recordingNumber.csv";
+    while(FileSystemEntity.typeSync(filename) != FileSystemEntityType.notFound) {
+      suffix++;
+      filename = "SimpleAlt_Flight_$recordingNumber - $suffix.csv";
+    }
+
+    final List<List<double>> list = points.map((value) => [value.x, value.y]).toList();
+    final String csv = const ListToCsvConverter().convert(list);
+    final scaffold = ScaffoldMessenger.of(context);
+  
+    File file = File(filename);
+    var writer = file.openWrite();
+    writer.write(csv); 
+    writer.close();
+    scaffold.showSnackBar(
+      SnackBar(
+        content: Text('File saved as $filename'),
       ),
     );
+  }
 
+  @override
+  Widget build(BuildContext context) {
     DropdownMenu recordingDropdown = DropdownMenu<Recording>(
-      initialSelection: dropdownValue,
+      initialSelection: selectedRecording,
       width: 400, 
       onSelected: (Recording? value) {
         // user selected a recording...
         altimeter.fetchRecording(value!.index); // get data for selected recording
         points = value.altitude.asMap().entries.map((e) => FlSpot(e.key.toDouble()*0.02, e.value)).toList(); //update graph data
         setState(() {
-          dropdownValue = value; //force update by setting new value
+          selectedRecording = value; //force update by setting new value
         });
       },
       dropdownMenuEntries: recordingList.map<DropdownMenuEntry<Recording>>((Recording value) {
@@ -102,36 +108,40 @@ class _MyHomePageState extends State<MyHomePage> {
       appBar: AppBar(
         //backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         backgroundColor: Colors.black,
-        title: Text(widget.title),
+        title: Text(widget.title), 
         actions: <Widget> [
-          IconButton(onPressed: refreshLogList, icon: const Icon(Icons.cable_rounded))
+          IconButton(
+            onPressed: refreshLogList, 
+            icon: const Icon(Icons.cable_rounded), 
+          ),
         ]
       ),
       body:Column(
         mainAxisAlignment: MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Expanded(             
+          Expanded(
             child: Padding (
               padding: const EdgeInsets.all(20),
-              child: altitudeChart,
+              child: AltitudeChart(points: points),
             )
           ),
+
           Padding(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.only(left:20, right:20, bottom:20, top:0),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 recordingDropdown,
-                const ElevatedButton(
+                ElevatedButton(
                   onPressed: onSave, 
-                  child: Text("Save"),
+                  child: const Text("Save"),
                 )
               ]
             )
           )
         ],
-      ), 
+      ),
     );
   }
 }
