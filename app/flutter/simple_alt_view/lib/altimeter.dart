@@ -1,26 +1,7 @@
 import 'dart:developer';
 import 'dart:typed_data';
 import 'package:flutter_libserialport/flutter_libserialport.dart';
-
-class Recording {
-  int index = 0;
-  int startAddress = 0;
-  int endAddress = 0;
-  List <double> data = [];
-  double groundLevel = 0;
-
-  Recording({required this.index, required this.startAddress, required this.endAddress});
-
-  double getDuration() {
-    return (endAddress - startAddress) / 5 * 0.02;
-  }
-
-  bool hasData() {
-    return (data.isNotEmpty);
-  }
-
-  List<double> get altitude => data.map((value) => value - groundLevel).toList();
-}
+import 'package:simple_alt_view/recording.dart';
 
 class Altimeter {
   static const firstAdress = 0x10000;
@@ -47,8 +28,7 @@ class Altimeter {
 
   Altimeter() {
     if (findAltimeter()) {
-      SerialPort sp = openPort();
-    
+      SerialPort sp = openPort(); 
       final command = Uint8List.fromList("i\n".codeUnits);
       sp.write(command, timeout: 1000);
       sp.close();
@@ -59,6 +39,8 @@ class Altimeter {
     Uint8List command = Uint8List(16);
     var response = Uint8List(61);
     double altitude;
+    double time = 0;
+    const double sampleTime = 0.02;
     
     if (findAltimeter()) {
       if (index < recordings.length) {
@@ -71,12 +53,13 @@ class Altimeter {
             sp.write(command, timeout: 1000);
             response = sp.read(60, timeout: 4000);
             for(int i = 0; i < 60; i+=5) {
+              time += sampleTime;
               if (address + i < recordings[index].endAddress) {
                 altitude = response.buffer.asByteData().getInt32(i + 1, Endian.little) / 100.0; 
                 if (address + i == recordings[index].startAddress) {
                   recordings[index].groundLevel = altitude;
                 }
-                recordings[index].data.add(altitude);          
+                recordings[index].data.add(Sample(time: time, altitude: altitude));          
               }
             }
             address += 60;
