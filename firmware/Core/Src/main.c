@@ -27,15 +27,14 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include <stdbool.h>
 #include "led.h"
 #include "power.h"
 #include "usbd_cdc_if.h"
-#include "spi_wrapper.h"
 #include "bmp280.h"
 #include "w25qxx.h"
 #include "command.h"
 #include "button.h"
+#include "filesystem.h"
 
 /* USER CODE END Includes */
 
@@ -46,10 +45,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define SECONDS_TO_TICKS(x) (x * 100);
-#define IDLE_TIMEOUT SECONDS_TO_TICKS(1200); 
-
-#define DATA_OFFSET 0x10000LLU
+#define SECONDS_TO_TICKS(x) (x * 100)
+#define ALTITUDE_IN_METERS(x) (x / 100)
 
 #define STATE_IDLE 0
 #define STATE_RECORDING 1
@@ -64,9 +61,6 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-uint8_t sleep = SNOOZE;
-uint8_t refresh_time = SECONDS_TO_TICKS(0.02);
-
 extern USBD_HandleTypeDef hUsbDeviceFS;
 extern uint8_t UserRxBufferFS[APP_RX_DATA_SIZE];
 extern uint8_t UserTxBufferFS[APP_TX_DATA_SIZE];
@@ -74,15 +68,10 @@ uint8_t rx_buffer[APP_RX_DATA_SIZE];
 uint16_t tx_buffer_index = 0;
 uint16_t rx_buffer_index = 0;
 
-W25QXX_HandleTypeDef w25qxx; // Handler for all w25qxx operations! 
-uint32_t next_free_index_slot = 0;
-uint32_t next_free_address = 0;
-
 const int8_t idle_sequence[] = {1, PAUSE, -2};
 const int8_t usb_sequence[] = {0, -1};
 const int8_t recording_sequence[] = {1, 2, -2}; 
 const int8_t button_sequence[] = {1, 2, 3, PAUSE, -1};
-
 
 /* USER CODE END PV */
 
@@ -102,6 +91,15 @@ uint8_t read_button(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+void print(char *tx_buffer, uint16_t len) {
+  // if we are going to overflow the buffer, drop the message entirely.
+  if (tx_buffer_index + len < sizeof(UserTxBufferFS)) {
+    memcpy(&UserTxBufferFS[tx_buffer_index], tx_buffer, len);
+    tx_buffer_index += len;
+  }
+}
+
 void print_pressure() {
   char buffer[8];
   itoa(bmp_get_pressure(), buffer, 10);
@@ -126,18 +124,12 @@ void print_voltage() {
   print(buffer, strlen(buffer));
 }
 
-
-void print(char *tx_buffer, uint16_t len) {
-  memcpy(&UserTxBufferFS[tx_buffer_index], tx_buffer, len);
-  tx_buffer_index += len;
-}
-
 // W address bytes
 void write_flash() {
   char* param;
   uint32_t address = 0;
-  uint8_t data[16];
   uint8_t len = 0;
+  uint8_t flash_buffer[64];
 
   param = cmd_get_param();
   if (param != NULL) {
@@ -147,12 +139,12 @@ void write_flash() {
   param = cmd_get_param();
   // WARNING NO CHECKS!!
   while (param != NULL) {
-    data[len++] = atoi(param);
+    flash_buffer[len++] = atoi(param);
     param = cmd_get_param();
   }
 
   if (len > 0) {
-    w25qxx_write(&w25qxx, address, data, len);
+    fs_raw_write(address, flash_buffer, len);
   } 
 }
 
@@ -160,19 +152,20 @@ void write_flash() {
 void read_flash() {
   uint32_t address;
   uint8_t len;
-  uint8_t buffer[16];
+  uint8_t flash_buffer[64];
+
   char str_buf[3] = {0};
   
   address = atoi(cmd_get_param());
   len = atoi(cmd_get_param());
 
   if (len > 0) {
-    w25qxx_read(&w25qxx, address, buffer, len);
+    fs_raw_read(address, flash_buffer, len);
     for (int i = 0; i < len; i++) {
-      if (buffer[i] < 0x10) {
+      if (flash_buffer[i] < 0x10) {
         print("0",1);
       }
-      print(itoa(buffer[i], str_buf, 16), strlen(str_buf));
+      print(itoa(flash_buffer[i], str_buf, 16), strlen(str_buf));
     }
   }
 }
@@ -181,44 +174,20 @@ void read_flash() {
 void read_flash_binary() {
   uint32_t address;
   uint8_t len;
-  uint8_t buffer[64];
+  uint8_t flash_buffer[64];
   
   address = atoi(cmd_get_param());
   len = atoi(cmd_get_param());
 
-  if (len > 0 && len <= sizeof(buffer)) {
-    w25qxx_read(&w25qxx, address, buffer, len);
-    print((char *)buffer, len);
+  if (len > 0 && len <= sizeof(flash_buffer)) {
+    fs_raw_read(address, flash_buffer, len);
+    print((char *)flash_buffer, len);
   }
 }
 
 void erase_flash() {
-  w25qxx_chip_erase(&w25qxx);
+  fs_erase();
   print("OK\n", 3);
-}
-
-void open_flash() {
-  int16_t i = 0;
-  uint32_t address = 0;
-  uint32_t last_address = DATA_OFFSET;
-  w25qxx_read(&w25qxx, i, (uint8_t *)&address, 4);
-  while (i < DATA_OFFSET && address < 0xFFFFFFFF) {
-    i+=4;
-    last_address = address;
-    w25qxx_read(&w25qxx, i, (uint8_t *)&address, 4);
-  }
-  next_free_index_slot = i;
-  next_free_address = last_address;
-}
-
-void close_flash() {
-  w25qxx_write(&w25qxx, next_free_index_slot, (uint8_t *)&next_free_address, 4);
-}
-
-void save(char label, uint8_t *data, uint16_t len) {
-  w25qxx_write(&w25qxx, next_free_address, (uint8_t *)&label, 1);
-  w25qxx_write(&w25qxx, next_free_address+1, data, len);
-  next_free_address += (len + 1);
 }
 
 /* USER CODE END 0 */
@@ -242,6 +211,8 @@ int main(void)
   int16_t temperature = 0;
   uint32_t pressure = 101325;
   uint16_t voltage = 0;
+
+  const uint8_t refresh_time = SECONDS_TO_TICKS(0.02);
 
 
   /* USER CODE END 1 */
@@ -272,8 +243,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   bmp_init(BMP_CS_GPIO_Port, BMP_CS_Pin);
-  w25qxx_init(&w25qxx, &hspi1, FLASH_CS_GPIO_Port, FLASH_CS_Pin); 
-  w25qxx_wake(&w25qxx); // just in case we were recently asleep
+  fs_init(&hspi1, FLASH_CS_GPIO_Port, FLASH_CS_Pin);
   
   // Calibrate The ADC On Power-Up For Better Accuracy
   HAL_ADCEx_Calibration_Start(&hadc);
@@ -294,14 +264,13 @@ int main(void)
 
   //1 second delay to give the user time to release the power on button. 
   //This prevents us detecting the release as a seperate event later on.
-  HAL_Delay(100);
+  HAL_Delay(SECONDS_TO_TICKS(1));
 
   /* USER CODE END 2 */
 
   uint8_t state = 0; // 0 = idle, 1 = recording 
   uint8_t last_state = 0;
   ButtonState button_state = BUTTON_IDLE;
-  uint32_t idle_timer = IDLE_TIMEOUT;
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
@@ -316,8 +285,8 @@ int main(void)
 
       /* Non-reentrant timer based function calls */
       led_blink();
-      measure_battery_voltage();
       button_state = button_get_state();
+      power_tick();
 
       /* check button presses */
       switch (button_state) {
@@ -327,23 +296,19 @@ int main(void)
         case BUTTON_HELD: // do nothing
           break; 
         case BUTTON_RELEASE_0: // handled in state machine code
-          idle_timer = IDLE_TIMEOUT;
+          power_idle_reset();
           break;
         case BUTTON_RELEASE_1: // handled in state machine code
-          idle_timer = IDLE_TIMEOUT;
+          power_idle_reset();
           break;
         case BUTTON_RELEASE_2:
-          sleep = SLEEP;
+          power_set_mode(SLEEP);
           break;
         case BUTTON_RELEASE_3:
-          sleep = SHUTDOWN;
+          power_set_mode(SHUTDOWN);
           break;
         case BUTTON_IDLE: // do nothing
           break;
-      }
-
-      if (idle_timer-- == 0) {
-        sleep = SLEEP;
       }
 
       /* Measurements */
@@ -364,12 +329,12 @@ int main(void)
             if (last_state == STATE_RECORDING) { 
               led_reset_sequence();
               // minimum height increase to eliminate accidental press/cancel 
-              if (max_altitude > 100) {
-                led_add_number_sequence(max_altitude / 100);
+              if (ALTITUDE_IN_METERS(max_altitude) > 1) {
+                led_add_number_sequence(ALTITUDE_IN_METERS(max_altitude));
               } else {
                 led_add_sequence(idle_sequence);
               }
-              close_flash(); // if we were recording, stop.
+              fs_close(); // if we were recording, stop.
             } else { // not sure how we got here, but lets do something sensible
               led_reset_sequence();
               led_add_sequence(idle_sequence);
@@ -393,18 +358,13 @@ int main(void)
             led_add_sequence(recording_sequence);
             ground_altitude = altitude;
             max_altitude = 0;
-            open_flash();
+            fs_open();
           }
 
           last_state = state;
 
-          // save the data, we are recording after all
-          save('A', (uint8_t *)&altitude, 4);
-
-          // if we're about to shut down, ensure the flash is closed.
-          if (sleep == SLEEP || sleep == SHUTDOWN) {
-            close_flash(); 
-          }
+          // save the data
+          fs_save('A', (uint8_t *)&altitude, 4);
 
           // ignore short press, proper press change to idle
           if (button_state == BUTTON_RELEASE_0) {
@@ -421,8 +381,8 @@ int main(void)
 
     /* Deal with data recieved via USB */
     if (rx_buffer_index > 0) {
-      sleep = AWAKE; //Dirty hack, move this to onConnect and revert in onDisconnect
-      idle_timer = IDLE_TIMEOUT; //don't sleep if there's USB traffic.
+      power_set_mode(AWAKE); //Dirty hack
+      power_idle_reset(); //don't go to sleep if actively in use
       cmd_read_input((char *)rx_buffer, rx_buffer_index);
       rx_buffer_index = 0;
     }
@@ -435,8 +395,8 @@ int main(void)
     }
    
     // Pause execution until woken by an interrupt.
-    // The systick will do this for us every ms if we're in normal mode.
-    power_down(sleep);
+    // The systick will do this for us every 10 ms if we're in normal mode.
+    power_management();
   }
   /* USER CODE END 3 */
 }
