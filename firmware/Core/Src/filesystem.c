@@ -2,6 +2,7 @@
 #include "w25qxx.h"
 
 #define DATA_OFFSET 0x10000LLU
+#define MAX_ADDRESS 0x1FFFFFLLU
 
 FilesystemState fs_state = FS_STOPPED;
 W25QXX_HandleTypeDef w25qxx; 
@@ -25,7 +26,7 @@ void fs_open() {
   uint32_t address = 0;
   uint32_t last_address = DATA_OFFSET;
   w25qxx_read(&w25qxx, i, (uint8_t *)&address, 4);
-  while (i < DATA_OFFSET && address < 0xFFFFFFFF) {
+  while (i < DATA_OFFSET && address < MAX_ADDRESS) {
     i += 4;
     last_address = address;
     w25qxx_read(&w25qxx, i, (uint8_t *)&address, 4);
@@ -42,8 +43,10 @@ void fs_close() {
   fs_state = FS_CLOSED;
 }
 
+//TODO add error state to return value so that this can be monitored and corrected 
+// or indicated to the user.
 void fs_save(char label, uint8_t *data, uint16_t len) {
-  if (fs_state == FS_OPEN) {
+  if (fs_state == FS_OPEN && next_free_address + len + 1 < MAX_ADDRESS) {
     w25qxx_write(&w25qxx, next_free_address, (uint8_t *)&label, 1);
     w25qxx_write(&w25qxx, next_free_address + 1, data, len);
     next_free_address += (len + 1);
