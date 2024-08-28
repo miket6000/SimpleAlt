@@ -13,6 +13,24 @@
 #include <unistd.h>
 #endif
 
+bool get_filename(char *dest, char *base_filename, char *extension) {
+  int file_append = 1;
+  
+  sprintf(dest, "%s.%s", base_filename, extension);
+
+  while (access(dest, F_OK) == 0 && file_append < 255) {
+    sprintf(dest, "%s_%i.%s", base_filename, file_append++, extension);
+  }
+
+  if (file_append >= 255) {
+    return false;
+  } else {
+    return true;
+  }
+
+}
+
+
 int main(int argc, char **argv) {
   
   /* Get the port names from the command line. */
@@ -45,39 +63,43 @@ int main(int argc, char **argv) {
 
   /* determine a filename that's descriptive, but not already in use */
   char filename[64];
-  int file_append = 1;
-  sprintf(filename, "SimpleAlt_flight_%i.csv", recording_id);
-
-  while (access(filename, F_OK) == 0) {
-    sprintf(filename, "SimpleAlt_flight_%i_%i.csv", recording_id, file_append++);
-  }
-  /* save the file */
 
   if (recording_id == 0) {
-    FILE *fpt = fopen(filename, "w+b");
-    uint8_t *data = (uint8_t *)malloc(0x00ffffff);
-    altimeter_get_data(data, 0, 0x00ffffff);
-    fwrite(data, sizeof(uint8_t), 0x00ffffff, fpt);
-    fclose(fpt);
-    free(data);
-  } else {
-    FILE *fpt = fopen(filename, "w+");
-    /* prepare and download the recording */
-    uint32_t recording_length = altimeter_get_recording_length(recording_id - 1);
-    int32_t *altitudes = (int32_t *)malloc(recording_length * sizeof(int32_t));
-    altimeter_get_recording(altitudes, recording_id - 1, recording_length);
-    fprintf(fpt, "Time, Altitude\n");
-    for (int i = 0; i < recording_length; i++) {
-      fprintf(fpt, "%0.2f, %0.2f\n", i * 0.02, (altitudes[i]-altitudes[0])/100.0);
+    if (get_filename(filename, "altimeter_dump", "bin")) {
+      uint8_t *data = (uint8_t *)malloc(0x00200000);
+      altimeter_get_data(data, 0, 0x00200000);
+
+      FILE *fpt = fopen(filename, "w+b");      
+      fwrite(data, sizeof(uint8_t), 0x00200000, fpt);
+      fclose(fpt);
+      free(data);
+    } else {
+      printf("Unable to save file.\n");
+      return -1;
     }
-    fclose(fpt);
-    free(altitudes);
-      
+  } else {
+    sprintf(filename, "SimpleAlt_log_%i", recording_id);
+    if (get_filename(filename, filename, "csv")) {
+      /* prepare and download the recording */
+      uint32_t recording_length = altimeter_get_recording_length(recording_id - 1);
+      int32_t *altitudes = (int32_t *)malloc(recording_length * sizeof(int32_t));
+      altimeter_get_recording(altitudes, recording_id - 1, recording_length);
+     
+      FILE *fpt = fopen(filename, "w+");
+      fprintf(fpt, "Time, Altitude\n");
+      for (int i = 0; i < recording_length; i++) {
+        fprintf(fpt, "%0.2f, %0.2f\n", i * 0.02, (altitudes[i]-altitudes[0])/100.0);
+      }
+      fclose(fpt);
+      free(altitudes);
+    } else {
+      printf("Unable to save file.\n");
+      return -1;
+    } 
   }
  
   printf("File saved as %s\n", filename);
 
-  /* tidy up and return successfully */
   return 0;
 }
 
