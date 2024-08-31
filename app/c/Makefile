@@ -1,7 +1,18 @@
 TARGET = simple
-LIBS = -lm -lserialport
 CC = gcc
 CFLAGS = -g -Wall
+
+#detect OS
+UNAME_S:= $(shell uname -s)
+
+# Platform-specific configurations
+ifeq ($(UNAME_S),Linux)
+    LIBS = -lm -lserialport
+else
+ ifeq ($(UNAME_S),FreeBSD)
+    LIBS = -lm -lserialport -lusb
+ endif
+endif
 
 .PHONY: default all clean
 
