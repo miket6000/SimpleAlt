@@ -22,4 +22,11 @@ jobs:
     - name: Build binary
       run: |
         cd firmware
-        make 
+        make -j4
+    
+    - name: Build c App
+      run: |
+        sudo apt update -y
+        sudo apt install -y libserialport-dev 
+        cd app/c
+        make -j4
