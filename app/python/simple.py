@@ -1,5 +1,5 @@
-#!/usr/bin/env python3
 import serial
+#!/usr/bin/env python3
 import csv
 from datetime import datetime
 import time
@@ -15,19 +15,27 @@ addr = 0
 a = 0
 t = 0
 
-""" 
-The record length is fixed at 5 (char label + (u)int32_t). 
-It's important that bytes_to_read does not exceed the maximum buffer size on the 
+record_types = {
+    'A': { 'size': 4 , 'name': 'Altitude' ,'order':"little", 'signed':True , 'factor':100 },
+    'P': { 'size': 4 , 'name': 'Presure'  ,'order':"little", 'signed':True, 'factor':100  },
+    'T': { 'size': 2 , 'name': 'Temperature'  ,'order':"little", 'signed':True, 'factor':100  },
+    'V': { 'size': 2 , 'name': 'Voltage'  ,'order':"little", 'signed':True, 'factor':1000 },
+}
+
+"""
+The record length is fixed at 5 (char label + (u)int32_t).
+It's important that bytes_to_read does not exceed the maximum buffer size on the
 SimpleAlt, which is currently 64 bytes.
 """
-num_records = 12
-record_length = 5
+num_records = 4
+items_per_record = 4
+record_length = 16 # 5 + 5 + 3 + 3
 bytes_to_read = num_records * record_length
 
 data = []
 
 with serial.Serial(port, timeout=1) as ser:
-    
+
     # ensure we're not in interactive mode.
     ser.write(f"i\n".encode())
     i = 0
@@ -51,30 +59,57 @@ with serial.Serial(port, timeout=1) as ser:
     except:
         print("Sorry the input wasn't recognised\n");
         exit()
-    
+
     start_time = time.time()
 
+    titles = ['Time']
+
     # Loop through the recordings and read the data out into a list of tuples
-    for i in range(start_address, end_address, bytes_to_read):
-        ser.write(f"r {i} {bytes_to_read}\n".encode())
+    for address in range(start_address, end_address, bytes_to_read):
+        ser.write(f"r {address} {bytes_to_read}\n".encode())
         for r in range(num_records):
-            label = chr(int.from_bytes(ser.read(1)))
-            if (label == 'A'): 
-                altitude = int.from_bytes(ser.read(4), byteorder="little", signed=True) / 100 
-                # assume the first entry is "ground"
-                if (i == start_address and r == 0): 
-                    ground_level = 0 #altitude
-                
-                data.append([t, altitude - ground_level])
-                t += sample_rate
+            row = [t]
+            for item in range(items_per_record):
+                label = chr(int.from_bytes(ser.read(1)))
+                recordType = record_types.get(label,None)
+
+                # all records must be known, abort if not
+                if recordType is None:
+                    print(f"Early exit at @{address}, instead of {end_address}");
+                    break;
+
+                value = int.from_bytes(ser.read(recordType['size']),
+                        byteorder=recordType['order'],
+                        signed=recordType['signed'] ) / recordType['factor']
+                if len(titles) <= items_per_record:
+                    titles.append(recordType['name'])
+
+                if (label == 'A'):
+                    # assume the first entry is "ground"
+                    if (address == start_address and r == 0):
+                        ground_level = 0 #value
+
+                    row.append(value - ground_level)
+                else:
+                    row.append(value)
+
+            data.append(row)
+            t += sample_rate
+            print(row, titles)
+
+
 
 print(f"Read {len(data)} records in {time.time() - start_time:.1f} seconds")
 filename = f"SimpleAlt_flight_{input_str}_{now.strftime('%Y%m%d_%H%M%S')}.csv"
 
-csv_data = [["Time", "Altitude"]]
+csv_data = [titles]
 
 for record in data:
-    csv_data.append([f"{record[0]:.2f}", f"{record[1]:.2f}"])
+    row = []
+    for item in record:
+        row.append(f"{item:0.3f}")
+
+    csv_data.append(row)
 
 with open(filename, 'w', newline='') as out:
     csv_out = csv.writer(out)

@@ -364,7 +364,10 @@ int main(void)
           last_state = state;
 
           // save the data
-          fs_save('A', (uint8_t *)&altitude, 4);
+          fs_save('A', &altitude,    sizeof(altitude));
+          fs_save('V', &voltage,     sizeof(voltage));
+          fs_save('T', &temperature, sizeof(temperature));
+          fs_save('P', &pressure,    sizeof(pressure));
 
           // ignore short press, proper press change to idle
           if (button_state == BUTTON_RELEASE_0) {

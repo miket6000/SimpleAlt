@@ -1,4 +1,5 @@
 import 'dart:developer';
+import 'dart:ffi';
 import 'dart:typed_data';
 import 'package:flutter_libserialport/flutter_libserialport.dart';
 import 'package:simple_alt_view/recording.dart';
@@ -7,6 +8,14 @@ class Altimeter {
   static const firstAdress = 0x10000;
   SerialPort? port;
   List<Recording> recordings = []; 
+  
+  final recordTypes = {
+    'A': (size: 4, name: 'Altitude', order: 'little', signed: true, factor: 100),
+    'P': (size: 4, name: 'Presure', order: 'little', signed: true, factor: 100),
+    'T': (size: 2, name: 'Temperature', order: 'little', signed: true, factor: 100),
+    'V': (size: 2, name: 'Voltage', order: 'little', signed: true, factor: 1000),
+  };
+
 
   bool findAltimeter() {
     for (final address in SerialPort.availablePorts) {
@@ -37,10 +46,14 @@ class Altimeter {
 
   Recording fetchRecording(int index) {
     Uint8List command = Uint8List(16);
-    var response = Uint8List(61);
+    var response = Uint8List(65);
     double altitude;
     double time = 0;
     const double sampleTime = 0.02;
+    const int numRecords = 4;
+    const int numItemsPerRecord = 4;
+    const int recordSize = 16;
+    const int bufferSize = numRecords * recordSize;
     
     if (findAltimeter()) {
       if (index < recordings.length) {
@@ -48,21 +61,26 @@ class Altimeter {
           //download the data
           SerialPort sp = openPort(); 
           int address = recordings[index].startAddress;
-          while(address < recordings[index].endAddress) {
-            command = Uint8List.fromList("r $address 60\n".codeUnits);
+          while((address+bufferSize) < recordings[index].endAddress) {
+            // read the next bunch of records 
+            command = Uint8List.fromList("r $address $bufferSize\n".codeUnits);
             sp.write(command, timeout: 1000);
-            response = sp.read(60, timeout: 4000);
-            for(int i = 0; i < 60; i+=5) {
-              time += sampleTime;
-              if (address + i < recordings[index].endAddress) {
-                altitude = response.buffer.asByteData().getInt32(i + 1, Endian.little) / 100.0; 
-                if (address + i == recordings[index].startAddress) {
-                  recordings[index].groundLevel = altitude;
-                }
-                recordings[index].data.add(Sample(time: time, altitude: altitude));          
+            response = sp.read(bufferSize, timeout: 4000);
+
+            for(int record = 0; record < numRecords; record++) {
+              for(int item = 0; item < numItemsPerRecord ; item++) {
+                Char label = response.buffer[address++];
+                  
+
+                  altitude = response.buffer.asByteData().getInt32(i + 1, Endian.little) / 100.0; 
+                  if (address + i == recordings[index].startAddress) {
+                    recordings[index].groundLevel = altitude;
+                  }
+                  recordings[index].data.add(Sample(time: time, altitude: altitude));          
+                time += sampleTime;
               }
+              address += recordSize;
             }
-            address += 60;
           } 
           sp.close();
         }
