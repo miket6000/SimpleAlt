@@ -7,7 +7,7 @@
 #define RX_BUFFER_LEN 32U
 #define TERM_CHAR '\n'
 #define DELIM " \0"
-#define MAX_NUM_COMMANDS 10
+#define MAX_NUM_COMMANDS 16
 
 static char rx_buffer[RX_BUFFER_LEN] = {0};
 static uint8_t buffer_index = 0;

@@ -28,7 +28,7 @@ void power_tick() {
     case 3:
       HAL_GPIO_WritePin(nSENSE_EN_GPIO_Port, nSENSE_EN_Pin, GPIO_PIN_SET);
       if (voltage < 3000) {
-        power_mode = SLEEP;
+//        power_mode = SLEEP; // This needs to be disabled if running without a battery
       }
       break;
     default:

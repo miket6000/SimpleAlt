@@ -7,18 +7,23 @@
 
 typedef enum {
   FS_STOPPED = 0,
-  FS_CLOSED,
-  FS_OPEN,
-} FilesystemState;
+  FS_CLEAN,
+  FS_DIRTY,
+} FSState;
 
-void fs_init(SPI_HandleTypeDef *hspi, GPIO_TypeDef *cs_port, uint16_t cs_pin);
-void fs_stop();
-void fs_open();
-void fs_close();
-void fs_save(char label, uint8_t *data, uint16_t len);
+typedef enum {
+  FS_OK = 0,
+  FS_ERR,
+} FSResult;
 
-void fs_raw_read(uint32_t address, uint8_t *buffer, uint16_t len);
-void fs_raw_write(uint32_t address, uint8_t *buffer, uint16_t len);
-void fs_erase();
+FSResult fs_init(SPI_HandleTypeDef *hspi, GPIO_TypeDef *cs_port, uint16_t cs_pin);
+FSResult fs_stop();
+FSResult fs_flush();
+FSResult fs_save(char label, uint8_t *data, uint16_t len);
+FSResult fs_save_config(char label, uint32_t value);
+uint32_t fs_read_config(char label, uint32_t fallback);
+FSResult fs_raw_read(uint32_t address, uint8_t *buffer, uint16_t len);
+FSResult fs_raw_write(uint32_t address, uint8_t *buffer, uint16_t len);
+FSResult fs_erase();
 
 #endif //FILESYSTEM_H

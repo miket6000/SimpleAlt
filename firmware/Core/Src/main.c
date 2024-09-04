@@ -190,6 +190,21 @@ void erase_flash() {
   print("OK\n", 3);
 }
 
+void set_config() {
+  char *label = cmd_get_param();
+  uint32_t value = atoi(cmd_get_param());
+  fs_save_config(label[0], value);
+  print("OK\n", 3); 
+}
+
+void get_config() {
+  char *label = cmd_get_param();
+  uint32_t value = fs_read_config(label[0], 0);
+  char str_buf[10] = {0};
+  print(itoa(value, str_buf, 10), strlen(str_buf));
+}
+
+
 /* USER CODE END 0 */
 
 /**
@@ -259,7 +274,8 @@ int main(void)
   cmd_add("i", cmd_unset_interactive);
   cmd_add("R", read_flash);
   cmd_add("r", read_flash_binary);
-  
+  cmd_add("SET", set_config);
+  cmd_add("GET", get_config);
   cmd_set_print_function(print);
 
   //1 second delay to give the user time to release the power on button. 
@@ -334,7 +350,7 @@ int main(void)
               } else {
                 led_add_sequence(idle_sequence);
               }
-              fs_close(); // if we were recording, stop.
+              fs_flush(); // if we were recording, stop.
             } else { // not sure how we got here, but lets do something sensible
               led_reset_sequence();
               led_add_sequence(idle_sequence);
@@ -358,7 +374,6 @@ int main(void)
             led_add_sequence(recording_sequence);
             ground_altitude = altitude;
             max_altitude = 0;
-            fs_open();
           }
 
           last_state = state;
