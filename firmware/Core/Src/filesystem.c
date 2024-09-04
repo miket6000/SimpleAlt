@@ -53,7 +53,7 @@ FSResult fs_flush() {
   return FS_OK;
 }
 
-FSResult fs_save(char label, uint8_t *data, uint16_t len) {
+FSResult fs_save(char label, void *data, uint16_t len) {
   if (next_free_address + len + 1 >= RECORDING_END_ADDRESS) {
     return FS_ERR;
   }
@@ -61,7 +61,7 @@ FSResult fs_save(char label, uint8_t *data, uint16_t len) {
   fs_state = FS_DIRTY;
 
   w25qxx_write(&w25qxx, next_free_address, (uint8_t *)&label, 1);
-  w25qxx_write(&w25qxx, next_free_address + 1, data, len);
+  w25qxx_write(&w25qxx, next_free_address + 1, (uint8_t *)data, len);
   next_free_address += (len + 1);
   return FS_OK;
 }

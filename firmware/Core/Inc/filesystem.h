@@ -19,7 +19,7 @@ typedef enum {
 FSResult fs_init(SPI_HandleTypeDef *hspi, GPIO_TypeDef *cs_port, uint16_t cs_pin);
 FSResult fs_stop();
 FSResult fs_flush();
-FSResult fs_save(char label, uint8_t *data, uint16_t len);
+FSResult fs_save(char label, void *data, uint16_t len);
 FSResult fs_save_config(char label, uint32_t value);
 uint32_t fs_read_config(char label, uint32_t fallback);
 FSResult fs_raw_read(uint32_t address, uint8_t *buffer, uint16_t len);
