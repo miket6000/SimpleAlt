@@ -46,6 +46,7 @@ extern "C" {
 
 /* Exported macro ------------------------------------------------------------*/
 /* USER CODE BEGIN EM */
+#define SECONDS_TO_TICKS(x) (x * 100)
 
 /* USER CODE END EM */
 

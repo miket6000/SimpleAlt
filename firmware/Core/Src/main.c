@@ -45,7 +45,6 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define SECONDS_TO_TICKS(x) (x * 100)
 #define ALTITUDE_IN_METERS(x) (x / 100)
 
 #define STATE_IDLE 0
@@ -120,7 +119,7 @@ void print_temperature() {
 
 void print_voltage() {
   char buffer[8];
-  itoa(get_battery_voltage(), buffer, 10);
+  itoa(power_get_battery_voltage(), buffer, 10);
   print(buffer, strlen(buffer));
 }
 
@@ -221,14 +220,16 @@ int main(void)
   int32_t altitude = 0;
   int32_t ground_altitude = 0;
   int32_t altitude_above_ground = 0;
-  int32_t max_altitude = 0;
+  uint32_t max_altitude = 0;
   
   int16_t temperature = 0;
   uint32_t pressure = 101325;
   uint16_t voltage = 0;
 
-  const uint8_t refresh_time = SECONDS_TO_TICKS(0.02);
-
+  uint32_t sample_rate_altitude = SECONDS_TO_TICKS(0.05);
+  uint32_t sample_rate_temperature = SECONDS_TO_TICKS(1);
+  uint32_t sample_rate_pressure = SECONDS_TO_TICKS(1);
+  uint32_t sample_rate_voltage = SECONDS_TO_TICKS(1);
 
   /* USER CODE END 1 */
 
@@ -260,11 +261,21 @@ int main(void)
   bmp_init(BMP_CS_GPIO_Port, BMP_CS_Pin);
   fs_init(&hspi1, FLASH_CS_GPIO_Port, FLASH_CS_Pin);
   
+  fs_read_config('P', &sample_rate_pressure);
+  fs_read_config('T', &sample_rate_temperature);
+  fs_read_config('A', &sample_rate_altitude);
+  fs_read_config('V', &sample_rate_voltage);
+  fs_read_config('M', &max_altitude);
+
+  if (max_altitude > 0) {
+    led_add_number_sequence(max_altitude);
+  }
+
+  led_add_sequence(idle_sequence);
+
   // Calibrate The ADC On Power-Up For Better Accuracy
   HAL_ADCEx_Calibration_Start(&hadc);
   
-  led_add_sequence(idle_sequence);
- 
   cmd_add("P", print_pressure); 
   cmd_add("T", print_temperature); 
   cmd_add("A", print_altitude); 
@@ -296,7 +307,7 @@ int main(void)
     /* USER CODE BEGIN 3 */
 
     tick = HAL_GetTick();
-    if ((tick - last_tick) >= refresh_time) {
+    if ((tick - last_tick) >= 1) {
       last_tick = tick;
 
       /* Non-reentrant timer based function calls */
@@ -328,7 +339,7 @@ int main(void)
       }
 
       /* Measurements */
-      voltage = get_battery_voltage();
+      voltage = power_get_battery_voltage();
       temperature = bmp_get_temperature();
       pressure = bmp_get_pressure();
       altitude = bmp_get_altitude();    
@@ -347,6 +358,7 @@ int main(void)
               // minimum height increase to eliminate accidental press/cancel 
               if (ALTITUDE_IN_METERS(max_altitude) > 1) {
                 led_add_number_sequence(ALTITUDE_IN_METERS(max_altitude));
+                fs_save_config('M', ALTITUDE_IN_METERS(max_altitude));
               } else {
                 led_add_sequence(idle_sequence);
               }
@@ -379,11 +391,21 @@ int main(void)
           last_state = state;
 
           // save the data
-//TODO:   Add time aware context here for each of the options.
-          fs_save('A', &altitude,     sizeof(altitude));
-          fs_save('P', &pressure,     sizeof(pressure));
-          fs_save('T', &temperature,  sizeof(temperature));
-          fs_save('V', &voltage,      sizeof(voltage));
+          if (tick % sample_rate_pressure == 0) {
+            fs_save('P', &pressure,     sizeof(pressure));
+          }
+
+          if (tick % sample_rate_temperature == 0) {
+            fs_save('T', &temperature,  sizeof(temperature));
+          }
+          
+          if (tick % sample_rate_altitude == 0) {
+            fs_save('A', &altitude,     sizeof(altitude));
+          }
+          
+          if (tick % sample_rate_voltage == 0) {
+            fs_save('V', &voltage,      sizeof(voltage));
+          }
 
           // ignore short press, proper press change to idle
           if (button_state == BUTTON_RELEASE_0) {

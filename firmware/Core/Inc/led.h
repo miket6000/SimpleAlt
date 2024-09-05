@@ -3,7 +3,6 @@
 
 #include "stdint.h"
 
-#define BLINK_OFF_TIME 17
 #define SEQUENCE_LEN 12
 
 #define SHORT_PAUSE 10

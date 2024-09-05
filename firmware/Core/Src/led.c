@@ -4,6 +4,7 @@
 #define MAX_BLINK (32 / 2 - 1)
 #define LED_MASK 0x01
 #define VALID_MASK 0x02
+#define BLINK_OFF_TIME SECONDS_TO_TICKS(0.34)
 
 /* Sequencer state variables */
 static uint8_t sequence_index = 0;

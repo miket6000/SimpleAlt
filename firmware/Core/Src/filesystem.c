@@ -66,20 +66,19 @@ FSResult fs_save(char label, void *data, uint16_t len) {
   return FS_OK;
 }
 
-uint32_t fs_read_config(char label, uint32_t fallback) {
+FSResult fs_read_config(char label, uint32_t *variable) {
   uint32_t address = INDEX_START_ADDRESS; 
   uint8_t buffer[5] = {0};
-  uint32_t data = fallback;
 
   while (address < INDEX_END_ADDRESS && buffer[0] != 0xff) {
     w25qxx_read(&w25qxx, address, buffer, 5);
     if ((char)buffer[0] == label) {
-      data = *((uint32_t *)&buffer[1]);
+      *variable = *((uint32_t *)&buffer[1]);
     }
     address += 5;
   }
   
-  return data;
+  return FS_OK;
 }
 
 FSResult fs_save_config(char label, uint32_t data) {

@@ -6,7 +6,10 @@
 #include "filesystem.h"
 
 #define VOLTAGE_OFFSET  200
-#define IDLE_TIMEOUT 120000
+#define VOLTAGE_SLOPE 6200
+#define VOLTAGE_LOW_ALARM 0
+#define IDLE_TIMEOUT SECONDS_TO_TICKS(1200)
+
 static uint16_t voltage = 0;
 static PowerMode power_mode = SNOOZE;
 static uint32_t idle_timer = IDLE_TIMEOUT;
@@ -16,7 +19,7 @@ void power_set_mode(PowerMode mode) {
 }
 
 void power_tick() {
-  static uint8_t measurement_timer = 0;
+  static uint16_t measurement_timer = 0;
   
   switch (measurement_timer++) {
     case 0:  
@@ -27,8 +30,8 @@ void power_tick() {
       break;
     case 3:
       HAL_GPIO_WritePin(nSENSE_EN_GPIO_Port, nSENSE_EN_Pin, GPIO_PIN_SET);
-      if (voltage < 3000) {
-//        power_mode = SLEEP; // This needs to be disabled if running without a battery
+      if (voltage < VOLTAGE_LOW_ALARM) {
+        power_mode = SLEEP; // This needs to be disabled if running without a battery
       }
       break;
     default:
@@ -70,9 +73,9 @@ void power_management() {
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 {
-    voltage = HAL_ADC_GetValue(hadc) * 6200 / 4096 + VOLTAGE_OFFSET;
+    voltage = ((HAL_ADC_GetValue(hadc) * VOLTAGE_SLOPE) >> 12) + VOLTAGE_OFFSET;
 }
 
-uint16_t get_battery_voltage(void) {
+uint16_t power_get_battery_voltage(void) {
   return voltage;
 }

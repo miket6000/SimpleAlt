@@ -22,11 +22,11 @@ ButtonState button_get_state() {
       button_result = BUTTON_IDLE;
     }
   } else { // button is up
-    if (button_counter > 220) { // > 4.4 seconds (blinking 1 2 3 takes 4.32 seconds) 
+    if (button_counter > SECONDS_TO_TICKS(4.4)) { // blinking 1 2 3 takes 4.32 seconds 
       button_result = BUTTON_RELEASE_3;
-    } else if (button_counter > 110) { // > 2.2 seconds (blinking 1 2 takes 2.16 seconds)
+    } else if (button_counter > SECONDS_TO_TICKS(2.2)) { // blinking 1 2 takes 2.16 seconds
       button_result = BUTTON_RELEASE_2;
-    } else if (button_counter > 20) { // > 0.4 seconds (blinking 1 takes 0.36 seconds)
+    } else if (button_counter > SECONDS_TO_TICKS(0.4)) { // blinking 1 takes 0.36 seconds
       button_result = BUTTON_RELEASE_1;
     } else if (button_counter > 0) {
       button_result = BUTTON_RELEASE_0; // bounce.
