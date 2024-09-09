@@ -83,6 +83,47 @@ void sync_altimeter(char *uid, uint8_t *altimeter_raw_data) {
     }
   }
 }  
+  
+uint8_t get_user_selection() {  
+  printf("The following recordings were found:\n");
+
+  // present the options to the user
+  uint8_t recording_id = 0;
+  Recording *p_recording = get_recording(recording_id);
+
+  while (p_recording != NULL) {  
+    printf("[%d], duration %.2fs, ground altitude %.2fm, max altitude (AGL) %.2fm\n", 
+      recording_id, 
+      p_recording->duration, 
+      p_recording->ground_altitude, 
+      (p_recording->max_altitude - p_recording->ground_altitude)
+    );
+    p_recording = get_recording(++recording_id);
+  }
+
+  printf("\nWhich would you like to export?\n> ");
+  // get and validate user decision on which recording to download 
+  int selected_id = 0;
+  scanf("%d", &selected_id);
+  return selected_id;
+}
+
+void write_csv(char *filename, Recording *p_recording) {
+  FILE *fpt = fopen(filename, "w+");
+  fprintf(fpt, "%s, %s, %s, %s, %s, %s\n", "Time", "Altitude", "Pressure", "Temperature", "Voltage", "State");
+  for (int i = 0; i < p_recording->length; i++) {
+    RecordingRow row = p_recording->rows[i];
+    fprintf(fpt, "%0.2f, %0.2f, %0.2f, %0.2f, %0.2f, %.2x\n", 
+      row.time / 1000.0,
+      row.altitude / 100.0,
+      row.pressure / 100.0,
+      row.temperature / 100.0,
+      row.voltage / 1000.0,
+      row.state 
+    );
+  }
+  fclose(fpt);
+}
 
 /* Application Flow:
  * 1) Open port and get UID
@@ -113,53 +154,21 @@ int main(int argc, char **argv) {
 
   sync_altimeter(uid, altimeter_raw_data);
   parse_recordings(altimeter_raw_data);
+  
+  uint8_t selection = get_user_selection();
 
-  printf("The following recordings were found:\n");
-
-  // present the options to the user
-  uint8_t recording_id = 0;
-  Recording *p_recording = get_recording(recording_id);
-
-  while (p_recording != NULL) {  
-    printf("[%d], duration %.2fs, ground altitude %.2fm, max altitude (AGL) %.2fm\n", 
-      recording_id, 
-      p_recording->duration, 
-      p_recording->ground_altitude, 
-      (p_recording->max_altitude - p_recording->ground_altitude)
-    );
-    p_recording = get_recording(++recording_id);
-  }
-
-  printf("\nWhich would you like to export?\n> ");
-  // get and validate user decision on which recording to download 
-  int selected_id = 0;
-  scanf("%d", &selected_id);
-
-  p_recording = get_recording(selected_id);
+  Recording *p_recording = get_recording(selection);
   if (p_recording == NULL) {
     printf("Sorry, the input was not recognised.\n");
-    return (-1);
+    return 0;
   }
 
-  // determine a filename that's descriptive, but not already in use
+  // save the selected file.
   char base_filename[64];
   char filename[64];
-  sprintf(base_filename, "SimpleAlt_%s_%i", uid, selected_id);
+  sprintf(base_filename, "SimpleAlt_%s_%i", uid, selection);
   if (get_filename(filename, base_filename, "csv")) {
-    FILE *fpt = fopen(filename, "w+");
-    fprintf(fpt, "%s, %s, %s, %s, %s, %s\n", "Time", "Altitude", "Pressure", "Temperature", "Voltage", "State");
-    for (int i = 0; i < p_recording->length; i++) {
-      RecordingRow row = p_recording->rows[i];
-      fprintf(fpt, "%0.2f, %0.2f, %0.2f, %0.2f, %0.2f, %.2x\n", 
-        row.time / 1000.0,
-        row.altitude / 100.0,
-        row.pressure / 100.0,
-        row.temperature / 100.0,
-        row.voltage / 1000.0,
-        row.state 
-      );
-    }
-    fclose(fpt);
+    write_csv(filename, p_recording);
   } else {
     printf("Unable to save file.\n");
     return -1;
