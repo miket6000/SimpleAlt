@@ -92,7 +92,19 @@ void w25qxx_wake(W25QXX_HandleTypeDef *w25qxx) {
   cs_off(w25qxx);
 }
 
-
+uint32_t w25qxx_read_uid(W25QXX_HandleTypeDef *w25qxx) {
+    uint32_t ret = 0;
+    uint8_t buf[8] = {0};
+    cs_on(w25qxx);
+    buf[0] = W25QXX_GET_UID;
+    if (w25qxx_transmit(w25qxx, buf, 5) == W25QXX_Ok) {
+        if (w25qxx_receive(w25qxx, buf, 8) == W25QXX_Ok) {
+            ret = (uint32_t) ((buf[4] << 24) | (buf[5] << 16) | (buf[6] << 8) | buf[7]);
+        }
+    }
+    cs_off(w25qxx);
+    return ret;
+}
 
 uint32_t w25qxx_read_id(W25QXX_HandleTypeDef *w25qxx) {
     uint32_t ret = 0;

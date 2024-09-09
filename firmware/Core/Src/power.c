@@ -7,7 +7,8 @@
 
 #define VOLTAGE_OFFSET  200
 #define VOLTAGE_SLOPE 6200
-#define VOLTAGE_LOW_ALARM 0
+// If running without a battery you must set the alarm voltage to 0
+#define VOLTAGE_LOW_ALARM 3000 
 #define IDLE_TIMEOUT SECONDS_TO_TICKS(1200)
 
 static uint16_t voltage = 0;
@@ -31,9 +32,11 @@ void power_tick() {
     case 3:
       HAL_GPIO_WritePin(nSENSE_EN_GPIO_Port, nSENSE_EN_Pin, GPIO_PIN_SET);
       if (voltage < VOLTAGE_LOW_ALARM) {
-        power_mode = SLEEP; // This needs to be disabled if running without a battery
+        power_mode = SLEEP; 
       }
       break;
+    case 99: // one second, reset timer. 
+      measurement_timer = 0;
     default:
       break;
   }

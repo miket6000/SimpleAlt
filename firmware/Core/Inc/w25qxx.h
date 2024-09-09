@@ -32,6 +32,7 @@
 
 #define W25QXX_DUMMY_BYTE         0xA5
 #define W25QXX_GET_ID             0x9F
+#define W25QXX_GET_UID            0x4B
 #define W25QXX_READ_DATA          0x03
 #define W25QXX_WRITE_ENABLE       0x06
 #define W25QXX_PAGE_PROGRAM       0x02
@@ -67,6 +68,6 @@ W25QXX_result_t w25qxx_read(W25QXX_HandleTypeDef *w25qxx, uint32_t address, uint
 W25QXX_result_t w25qxx_write(W25QXX_HandleTypeDef *w25qxx, uint32_t address, uint8_t *buf, uint32_t len);
 W25QXX_result_t w25qxx_erase(W25QXX_HandleTypeDef *w25qxx, uint32_t address, uint32_t len);
 W25QXX_result_t w25qxx_chip_erase(W25QXX_HandleTypeDef *w25qxx);
-
+uint32_t w25qxx_read_uid(W25QXX_HandleTypeDef *w25qxx);
 #endif /* W25QXX_H_ */
 

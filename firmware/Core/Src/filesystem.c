@@ -48,9 +48,15 @@ FSResult fs_stop() {
 }
 
 FSResult fs_flush() {
-  fs_save_config('R', next_free_address);
+  if (fs_state == FS_DIRTY) {
+    fs_save_config('R', &next_free_address);
+  }
   fs_state = FS_CLEAN;
   return FS_OK;
+}
+
+uint32_t fs_get_uid() {
+  return w25qxx_read_uid(&w25qxx);
 }
 
 FSResult fs_save(char label, void *data, uint16_t len) {
@@ -73,7 +79,7 @@ FSResult fs_read_config(char label, uint32_t *variable) {
   while (address < INDEX_END_ADDRESS && buffer[0] != 0xff) {
     w25qxx_read(&w25qxx, address, buffer, 5);
     if ((char)buffer[0] == label) {
-      *variable = *((uint32_t *)&buffer[1]);
+      *variable = *(uint32_t *)&buffer[1];
     }
     address += 5;
   }
@@ -81,10 +87,10 @@ FSResult fs_read_config(char label, uint32_t *variable) {
   return FS_OK;
 }
 
-FSResult fs_save_config(char label, uint32_t data) {
+FSResult fs_save_config(char label, void *data) {
   if ((next_free_index + 5) < INDEX_END_ADDRESS) {
     w25qxx_write(&w25qxx, next_free_index, (uint8_t *)&label, 1);
-    w25qxx_write(&w25qxx, next_free_index + 1, (uint8_t *)&data, 4);
+    w25qxx_write(&w25qxx, next_free_index + 1, (uint8_t *)data, 4);
     next_free_index += 5;
     return FS_OK;
   }
@@ -109,6 +115,9 @@ FSResult fs_erase() {
   if (w25qxx_chip_erase(&w25qxx) != W25QXX_Ok) {
     return FS_ERR;
   }
+  next_free_index = INDEX_START_ADDRESS;
+  next_free_address = RECORDING_START_ADDRESS;
+
   return FS_OK;
 }
 

@@ -8,6 +8,7 @@
 
 #define FIRST_ADDRESS 0x10000
 #define ALTIMETER_BUFFER_SIZE 64
+#define UID_LENGTH  8
 #define RECORD_LENGTH 5
 #define RECORD_ALIGNED_BUFFER_SIZE (ALTIMETER_BUFFER_SIZE - (ALTIMETER_BUFFER_SIZE % RECORD_LENGTH))
 
@@ -15,16 +16,18 @@ static const unsigned int timeout = 1000;
 static struct sp_port *port;
 static uint32_t addresses[MAX_NUM_ADDRESSES];
 static uint32_t num_addresses = 0;
+static LogState log_state;
+static char uid[UID_LENGTH + 1] = {0}; // +1 for null terminated string
 
 static int altimeter_get_block(uint8_t *buffer, uint32_t start_address, uint8_t len);
 
-int altimeter_connect(const char * const port_name) {
+char *altimeter_connect(const char * const port_name) {
   if (sp_get_port_by_name(port_name, &port) != SP_OK) {
-    return (-1);
+    return (NULL);
   }
 
   if (sp_open(port, SP_MODE_READ_WRITE) != SP_OK) {
-    return (-1);
+    return (NULL);
   }
 
   sp_set_baudrate(port, 115200);
@@ -33,9 +36,17 @@ int altimeter_connect(const char * const port_name) {
   sp_set_stopbits(port, 1);
   sp_set_flowcontrol(port, SP_FLOWCONTROL_NONE);
   
-  sp_blocking_write(port, "i\n", 2, timeout);
+  //Not sure why this fails occasionally, but until I figure it out, I can fudge it...
+  uint8_t retries = 0;
+  while (uid[0] == '\0' && retries < 3) {
+    sp_blocking_write(port, "\n", 1, timeout);    // flush altimeter input buffer
+    sp_blocking_write(port, "i\n", 2, timeout);   // turn off interactive mode
+    sp_blocking_write(port, "UID\n", 4, timeout); // get UID
+    sp_blocking_read(port, &uid, UID_LENGTH, timeout);
+    retries++;
+  }
 
-  return altimeter_get_addresses();
+  return uid;
 }
 
 int altimeter_get_block(uint8_t *buffer, const uint32_t start_address, const uint8_t len) {
@@ -102,9 +113,6 @@ int altimeter_get_data(uint8_t *buffer, const uint32_t start_address, const uint
     if (bytes_to_get > RECORD_ALIGNED_BUFFER_SIZE) {
       bytes_to_get = RECORD_ALIGNED_BUFFER_SIZE;
     }
-    
-    //printf("address: %i, end_address: %i, bytes_to_get: %i\n", address, end_address, bytes_to_get);
-
     altimeter_get_block(&buffer[buffer_address], address, bytes_to_get);
     buffer_address += bytes_to_get;
     address += bytes_to_get;

@@ -69,7 +69,7 @@ uint16_t rx_buffer_index = 0;
 
 const int8_t idle_sequence[] = {1, PAUSE, -2};
 const int8_t usb_sequence[] = {0, -1};
-const int8_t recording_sequence[] = {1, 2, -2}; 
+const int8_t recording_sequence[] = {2, -1}; 
 const int8_t button_sequence[] = {1, 2, 3, PAUSE, -1};
 
 /* USER CODE END PV */
@@ -192,18 +192,23 @@ void erase_flash() {
 void set_config() {
   char *label = cmd_get_param();
   uint32_t value = atoi(cmd_get_param());
-  fs_save_config(label[0], value);
+  fs_save_config(label[0], &value);
   print("OK\n", 3); 
 }
 
 void get_config() {
   char *label = cmd_get_param();
-  uint32_t value = fs_read_config(label[0], 0);
+  uint32_t value = 0xFFFFFFFF;
+  fs_read_config(label[0], &value);
   char str_buf[10] = {0};
   print(itoa(value, str_buf, 10), strlen(str_buf));
 }
 
-
+void get_uid() {
+  uint32_t uid = fs_get_uid();
+  char str_buf[10] = {0};
+  print(itoa(uid, str_buf, 16), strlen(str_buf));
+}
 /* USER CODE END 0 */
 
 /**
@@ -228,7 +233,7 @@ int main(void)
 
   uint32_t sample_rate_altitude = SECONDS_TO_TICKS(0.05);
   uint32_t sample_rate_temperature = SECONDS_TO_TICKS(1);
-  uint32_t sample_rate_pressure = SECONDS_TO_TICKS(1);
+  uint32_t sample_rate_pressure = 0;
   uint32_t sample_rate_voltage = SECONDS_TO_TICKS(1);
 
   /* USER CODE END 1 */
@@ -287,6 +292,7 @@ int main(void)
   cmd_add("r", read_flash_binary);
   cmd_add("SET", set_config);
   cmd_add("GET", get_config);
+  cmd_add("UID", get_uid);
   cmd_set_print_function(print);
 
   //1 second delay to give the user time to release the power on button. 
@@ -345,8 +351,10 @@ int main(void)
       altitude = bmp_get_altitude();    
       
       altitude_above_ground = altitude - ground_altitude;
-      if (altitude_above_ground > max_altitude) {
-        max_altitude = altitude_above_ground;
+      if (altitude_above_ground > 0) {
+        if (altitude_above_ground > max_altitude) {
+          max_altitude = altitude_above_ground;
+        }
       }
 
       /* State specific behaviour and transitions */
@@ -355,14 +363,15 @@ int main(void)
           if (last_state != STATE_IDLE) {
             if (last_state == STATE_RECORDING) { 
               led_reset_sequence();
-              // minimum height increase to eliminate accidental press/cancel 
+              // minimum height increase to eliminate accidental press/cancel
               if (ALTITUDE_IN_METERS(max_altitude) > 1) {
-                led_add_number_sequence(ALTITUDE_IN_METERS(max_altitude));
-                fs_save_config('M', ALTITUDE_IN_METERS(max_altitude));
+                uint32_t altitude_in_meters = ALTITUDE_IN_METERS(max_altitude);
+                led_add_number_sequence(altitude_in_meters);
+                fs_save_config('M', &altitude_in_meters);
               } else {
                 led_add_sequence(idle_sequence);
               }
-              fs_flush(); // if we were recording, stop.
+              fs_flush(); // write the log end address to the index table.
             } else { // not sure how we got here, but lets do something sensible
               led_reset_sequence();
               led_add_sequence(idle_sequence);
@@ -391,20 +400,20 @@ int main(void)
           last_state = state;
 
           // save the data
-          if (tick % sample_rate_pressure == 0) {
-            fs_save('P', &pressure,     sizeof(pressure));
+          if (sample_rate_pressure != 0 && tick % sample_rate_pressure == 0) {
+            fs_save('P', &pressure, sizeof(pressure));
           }
 
-          if (tick % sample_rate_temperature == 0) {
-            fs_save('T', &temperature,  sizeof(temperature));
+          if (sample_rate_temperature != 0 && tick % sample_rate_temperature == 0) {
+            fs_save('T', &temperature, sizeof(temperature));
           }
           
-          if (tick % sample_rate_altitude == 0) {
-            fs_save('A', &altitude,     sizeof(altitude));
+          if (sample_rate_altitude != 0 && tick % sample_rate_altitude == 0) {
+            fs_save('A', &altitude, sizeof(altitude));
           }
           
-          if (tick % sample_rate_voltage == 0) {
-            fs_save('V', &voltage,      sizeof(voltage));
+          if (sample_rate_voltage != 0 && tick % sample_rate_voltage == 0) {
+            fs_save('V', &voltage, sizeof(voltage));
           }
 
           // ignore short press, proper press change to idle
