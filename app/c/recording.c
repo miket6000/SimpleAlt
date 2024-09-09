@@ -128,6 +128,7 @@ void add_next_recording(uint8_t *data, uint32_t len) {
   uint32_t address = 0;
   uint8_t label;
   uint32_t index = 0;
+  const float alt_scale = record_types[ALTITUDE].scale;
   RecordingRow *rows = malloc(sizeof(RecordingRow) * (ALTIMETER_FLASH_SIZE - ALTIMETER_INDEX_SIZE));
   recordings[num_recordings].rows = rows;
 
@@ -145,11 +146,11 @@ void add_next_recording(uint8_t *data, uint32_t len) {
         // There are a couple of special cases we want to record for altitude
         // namely, ground and max.
         rows[index].altitude = *(int32_t *)&data[address];
-        if (rows[index].altitude > recordings[num_recordings].max_altitude) {
-          recordings[num_recordings].max_altitude = rows[index].altitude;
+        if (rows[index].altitude / alt_scale > recordings[num_recordings].max_altitude) {
+          recordings[num_recordings].max_altitude = rows[index].altitude / alt_scale;
         }
         if (index == 0) {
-          recordings[num_recordings].ground_altitude = rows[index].altitude;
+          recordings[num_recordings].ground_altitude = rows[index].altitude / alt_scale;
         }
         index = advance_record(ALTITUDE, rows, index);
         break;
@@ -179,7 +180,7 @@ void add_next_recording(uint8_t *data, uint32_t len) {
     
   }
         
-  recordings[num_recordings].duration = rows[index-1].time;
+  recordings[num_recordings].duration = rows[index-1].time / 1000.0;
   recordings[num_recordings].length = index-1;
 
   num_recordings += 1;

@@ -15,7 +15,6 @@
 #endif
 
 uint8_t altimeter_raw_data[ALTIMETER_FLASH_SIZE] = {0};
-uint8_t altimeter_index[ALTIMETER_INDEX_SIZE] = {0};
 
 bool get_filename(char *dest, char * const base_filename, char * const extension) {
   int file_append = 1;
@@ -33,7 +32,8 @@ bool get_filename(char *dest, char * const base_filename, char * const extension
   return true;  
 }
 
-uint32_t locate_difference(uint8_t *data1, uint8_t *data2, uint32_t length) {
+/* returns the index of the first byte that is different between the two buffers */
+uint32_t diff(uint8_t * const data1, uint8_t * const data2, uint32_t length) {
   for (uint32_t i = 0; i < length; i++) {
     if (data1[i] != data2[i]) {
       return i;
@@ -41,6 +41,48 @@ uint32_t locate_difference(uint8_t *data1, uint8_t *data2, uint32_t length) {
   }
   return length;
 }
+
+
+/* update local file and buffers to match altimeter */
+void sync_altimeter(char *uid, uint8_t *altimeter_raw_data) {
+  char filename[64];
+  uint8_t altimeter_index[ALTIMETER_INDEX_SIZE];
+  uint32_t difference = 0;
+  FILE *fpt = NULL;
+
+  sprintf(filename, "%s.dump", uid);
+
+  if (access(filename, F_OK) != 0) {
+    printf("Local save file not found, downloading...\n");
+    altimeter_get_data(altimeter_raw_data, 0, ALTIMETER_FLASH_SIZE-1);
+    fpt = fopen(filename, "wb+");
+    fwrite(altimeter_raw_data, sizeof(uint8_t), ALTIMETER_FLASH_SIZE, fpt);  
+    fclose(fpt);
+    printf("Saved data as %s.\n", filename);
+  } else {
+    printf("Local save file found (%s), comparing to altimeter data.\n", filename);
+    // Download index, and calculate checksum. Compare to file checksum over same area
+    altimeter_get_data(altimeter_index, 0, ALTIMETER_INDEX_SIZE-1);
+    fpt = fopen(filename, "rb");
+    fread(altimeter_raw_data, sizeof(uint8_t), ALTIMETER_FLASH_SIZE, fpt);
+    fclose(fpt);
+
+    difference = diff(altimeter_index, altimeter_raw_data, ALTIMETER_INDEX_SIZE);
+
+    if (difference < ALTIMETER_INDEX_SIZE) {
+      printf("Local save file and altimeter differ, updating...\n");
+      // we've already downloaded the index, just copy it across, then grab the rest
+      memcpy(altimeter_raw_data, altimeter_index, ALTIMETER_INDEX_SIZE);
+      altimeter_get_data(&altimeter_raw_data[ALTIMETER_INDEX_SIZE], ALTIMETER_INDEX_SIZE, ALTIMETER_FLASH_SIZE-1);
+
+      fpt = fopen(filename, "wb+");
+      fwrite(altimeter_raw_data, sizeof(uint8_t), ALTIMETER_FLASH_SIZE, fpt);  
+      fclose(fpt);
+    } else {
+      printf("No difference found, local save file is up to date.\n");
+    }
+  }
+}  
 
 /* Application Flow:
  * 1) Open port and get UID
@@ -69,52 +111,23 @@ int main(int argc, char **argv) {
 
   printf("Successfully connected to altimeter (UID = %s).\n", uid);
 
-  char filename[64];
-  sprintf(filename, "%s.dump", uid);
-
-  if (access(filename, F_OK) != 0) {
-    printf("Local save file not found, downloading...\n");
-    altimeter_get_data(altimeter_raw_data, 0, ALTIMETER_FLASH_SIZE-1);
-    FILE *fpt = fopen(filename, "wb+");
-    fwrite(altimeter_raw_data, sizeof(uint8_t), ALTIMETER_FLASH_SIZE, fpt);  
-    fclose(fpt);
-    printf("Saved data as %s.\n", filename);
-  } else {
-    printf("Local save file found (%s), comparing to altimeter data.\n", filename);
-    // Download index, and calculate checksum. Compare to file checksum over same area
-    altimeter_get_data(altimeter_index, 0, ALTIMETER_INDEX_SIZE-1);
-    FILE *fpt = fopen(filename, "rb");
-    fread(altimeter_raw_data, sizeof(uint8_t), ALTIMETER_FLASH_SIZE, fpt);
-    fclose(fpt);
-
-    uint32_t divergence = locate_difference(altimeter_index, altimeter_raw_data, ALTIMETER_INDEX_SIZE);
-
-    if (divergence < ALTIMETER_INDEX_SIZE) {
-      printf("Local save file and altimeter differ, updating...\n");
-      // we've already downloaded the index, just copy it across, then grab the rest
-      memcpy(altimeter_raw_data, altimeter_index, ALTIMETER_INDEX_SIZE);
-      altimeter_get_data(&altimeter_raw_data[ALTIMETER_INDEX_SIZE], ALTIMETER_INDEX_SIZE, ALTIMETER_FLASH_SIZE);
-
-      FILE *fpt = fopen(filename, "wb+");
-      fwrite(altimeter_raw_data, sizeof(uint8_t), ALTIMETER_FLASH_SIZE, fpt);  
-      fclose(fpt);
-    } else {
-      printf("No difference found, local save file is up to date.\n");
-    }
-  }
-
-  // convert the data to a more digestable format
-  printf("The following recordings were found:\n");
+  sync_altimeter(uid, altimeter_raw_data);
   parse_recordings(altimeter_raw_data);
+
+  printf("The following recordings were found:\n");
 
   // present the options to the user
   uint8_t recording_id = 0;
   Recording *p_recording = get_recording(recording_id);
-  while (p_recording != NULL) {
-    
-    printf("Recording [%d], duration %.2fs, ground altitude %.2fm, max altitude (AGL) %.2fm\n", recording_id, p_recording->duration / 1000.0, p_recording->ground_altitude / 100.0, (p_recording->max_altitude - p_recording->ground_altitude) / 100.0);
 
-    p_recording = get_recording(++recording_id);  
+  while (p_recording != NULL) {  
+    printf("[%d], duration %.2fs, ground altitude %.2fm, max altitude (AGL) %.2fm\n", 
+      recording_id, 
+      p_recording->duration, 
+      p_recording->ground_altitude, 
+      (p_recording->max_altitude - p_recording->ground_altitude)
+    );
+    p_recording = get_recording(++recording_id);
   }
 
   printf("\nWhich would you like to export?\n> ");
@@ -130,6 +143,7 @@ int main(int argc, char **argv) {
 
   // determine a filename that's descriptive, but not already in use
   char base_filename[64];
+  char filename[64];
   sprintf(base_filename, "SimpleAlt_%s_%i", uid, selected_id);
   if (get_filename(filename, base_filename, "csv")) {
     FILE *fpt = fopen(filename, "w+");

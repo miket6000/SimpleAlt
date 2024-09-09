@@ -25,9 +25,9 @@ typedef struct {
 } RecordType;
 
 typedef struct {
-  uint32_t duration;
-  uint32_t max_altitude;
-  uint32_t ground_altitude;
+  float duration;
+  float max_altitude;
+  float ground_altitude;
   uint32_t length;
   RecordingRow *rows;
 } Recording;

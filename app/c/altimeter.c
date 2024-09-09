@@ -16,7 +16,6 @@ static const unsigned int timeout = 1000;
 static struct sp_port *port;
 static uint32_t addresses[MAX_NUM_ADDRESSES];
 static uint32_t num_addresses = 0;
-static LogState log_state;
 static char uid[UID_LENGTH + 1] = {0}; // +1 for null terminated string
 
 static int altimeter_get_block(uint8_t *buffer, uint32_t start_address, uint8_t len);
