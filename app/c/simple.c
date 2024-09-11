@@ -96,7 +96,7 @@ uint8_t get_user_selection() {
       recording_id, 
       p_recording->duration, 
       p_recording->ground_altitude, 
-      (p_recording->max_altitude - p_recording->ground_altitude)
+      p_recording->max_altitude
     );
     p_recording = get_recording(++recording_id);
   }
@@ -114,11 +114,11 @@ void write_csv(char *filename, Recording *p_recording) {
   for (int i = 0; i < p_recording->length; i++) {
     RecordingRow row = p_recording->rows[i];
     fprintf(fpt, "%0.2f, %0.2f, %0.2f, %0.2f, %0.2f, %.2x\n", 
-      row.time / 1000.0,
-      row.altitude / 100.0,
-      row.pressure / 100.0,
-      row.temperature / 100.0,
-      row.voltage / 1000.0,
+      row.time,
+      row.altitude,
+      row.pressure,
+      row.temperature,
+      row.voltage,
       row.state 
     );
   }

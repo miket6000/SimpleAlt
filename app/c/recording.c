@@ -6,17 +6,19 @@
 
 static Recording recordings[255];
 static uint8_t num_recordings = 0;
-static const uint8_t tick_duration = 10;
+static const float tick_duration = 0.01;
 
 static RecordType record_types[] = {
-  {"Altitude",    'A',  4,  true,  100.0,  5},
-  {"Pressure",    'P',  4,  false, 100.0,  0},
-  {"Temperature", 'T',  2,  true,  10.0,   100},
-  {"Voltage",     'V',  2,  false, 1000.0, 100},
-  {"State",       'S',  1,  false, 1.0,    0},
-  {"Unknown",     '?',  0,  false, 1.0,    0}
+  {"Altitude",    'A', 5,    read_altitude},
+  {"Pressure",    'P', 0,    read_pressure},
+  {"Temperature", 'T', 100,  read_temperature},
+  {"Voltage",     'V', 100,  read_voltage},
+  {"State",       'S', 0,    read_state},
 };
 
+inline static uint16_t swap16(const uint8_t * const bytes) {
+  return (uint16_t)((bytes[1] << 8) + bytes[0]);
+}
 inline static uint32_t swap32(const uint8_t * const bytes) {
   return (uint32_t)((bytes[3] << 24) + (bytes[2] << 16) + (bytes[1] << 8) + bytes[0]);
 }
@@ -51,7 +53,7 @@ RecordType *get_record_type(char label) {
       return &record_types[datatype];
     }
   }
-  return &record_types[UNKNOWN];
+  return NULL;
 }
 
 void parse_recordings(uint8_t *data) { 
@@ -66,7 +68,7 @@ void parse_recordings(uint8_t *data) {
         // We know where the recording starts/ends and we know the sampling config
         // Now's as good a time as any to unpack the data.
         uint32_t length = value - recording_start_address;
-        add_next_recording(&data[recording_start_address], length);
+        add_recording(&data[recording_start_address], length);
         recording_start_address = value;
         break;
       case 'T':
@@ -104,13 +106,12 @@ void parse_recordings(uint8_t *data) {
  * in each row. 
  * Returns the new current row index.
  */
-uint32_t advance_record(DataType datatype, RecordingRow *rows, uint32_t index) {
+void advance_row(Recording *recording, DataType datatype) {
   if (is_highest_sampled_datatype(datatype)) {
-    rows[index].time = index * tick_duration * record_types[datatype].sample_rate;
-    index++;
-    memcpy(&rows[index], &rows[index-1], sizeof(RecordingRow));
+    recording->current_row->time += (tick_duration * record_types[datatype].sample_rate);
+    recording->current_row++;
+    memcpy(recording->current_row, recording->current_row - 1, sizeof(RecordingRow));
   }
-  return index;
 }
 
 /* 
@@ -124,66 +125,74 @@ uint32_t advance_record(DataType datatype, RecordingRow *rows, uint32_t index) {
  * that each recording uses the full flash available. This over allocates, but we 
  * won't run out. We rely on the application closing to free the mallocs.
  */
-void add_next_recording(uint8_t *data, uint32_t len) {
-  uint32_t address = 0;
-  uint8_t label;
-  uint32_t index = 0;
-  const float alt_scale = record_types[ALTITUDE].scale;
+void add_recording(uint8_t *data, uint32_t len) {
+  uint8_t *p_data = data;
+  uint8_t *p_data_end = p_data + len;
   RecordingRow *rows = malloc(sizeof(RecordingRow) * (ALTIMETER_FLASH_SIZE - ALTIMETER_INDEX_SIZE));
-  recordings[num_recordings].rows = rows;
+  Recording *recording = &recordings[num_recordings];
+  recording->rows = rows;
+  recording->current_row = rows;
 
-  while (address < len) {
-    // address is increamented after reading the label so that it points to the value
-    label = data[address++];
-    RecordType *record_type = get_record_type(label);
-
-    //printf("[info] address = %.8x, label=%c, stepping %d bytes\n", address-1 + ALTIMETER_INDEX_SIZE, record_type->label, record_type->size);
-
-
-    // how could the switch statement be improved/removed?
-    switch (label) {
-      case 'A':
-        // There are a couple of special cases we want to record for altitude
-        // namely, ground and max.
-        rows[index].altitude = *(int32_t *)&data[address];
-        if (rows[index].altitude / alt_scale > recordings[num_recordings].max_altitude) {
-          recordings[num_recordings].max_altitude = rows[index].altitude / alt_scale;
-        }
-        if (index == 0) {
-          recordings[num_recordings].ground_altitude = rows[index].altitude / alt_scale;
-        }
-        index = advance_record(ALTITUDE, rows, index);
-        break;
-      case 'T':
-        rows[index].temperature = *(int16_t *)&data[address];
-        index = advance_record(TEMPERATURE, rows, index);
-        break;
-      case 'P':
-        rows[index].pressure = *(uint32_t *)&data[address];
-        index = advance_record(PRESSURE, rows, index);
-        break;
-      case 'V':
-        rows[index].voltage = *(uint16_t *)&data[address];
-        index = advance_record(VOLTAGE, rows, index);
-        break;
-      case 'S':
-        index = advance_record(STATE, rows, index);
-        break;
-      default:
-        // If we lose sync somehow we'll get a few of these, but the address increments
-        // when reading the labels will eventually push us back into sync.
-        printf("[warning] Unrecognised record label '%c' (0x%.2x) at address 0x%.8x\n", label, label, address);
-        break;
+  while (p_data < p_data_end) {
+    bool data_recognised = false;
+    for (int data_type = 0; data_type < NUM_DATATYPES; data_type++) {
+      if (record_types[data_type].label == *p_data) {
+        data_recognised = true;
+        record_types[data_type].read(recording, &p_data);
+        advance_row(recording, data_type);
+      }
     }
-    
-    address += record_type->size;
-    
+    if (!data_recognised) {
+      printf("[warning] label %c (0x%.2x) at address 0x%.8x not recognised\n", *p_data, *p_data, *p_data); 
+      p_data++;
+    }
   }
-        
-  recordings[num_recordings].duration = rows[index-1].time / 1000.0;
-  recordings[num_recordings].length = index-1;
+
+  recording->duration = (recording->current_row - 1)->time;
+  recording->length = recording->current_row - recording->rows;
 
   num_recordings += 1;
 
 }
+
+
+void read_altitude(Recording *recording, uint8_t **ptr) {
+  float altitude_AGL = 0;
+  float altitude = (int32_t)swap32(*ptr + 1) / 100.0;  
+
+  recording->current_row->altitude = altitude;
+
+  if (recording->current_row == recording->rows) {
+    recording->ground_altitude = recording->current_row->altitude;
+  }
+
+  altitude_AGL = altitude - recording->ground_altitude;
+
+  if (altitude_AGL > recording->max_altitude) {
+    recording->max_altitude = altitude_AGL;
+  }
+
+  *ptr += 5;
+}
+
+void read_pressure(Recording *recording, uint8_t **ptr) {
+  recording->current_row->pressure = swap32(*ptr + 1) / 100.0;
+  *ptr += 5;
+}
+
+void read_temperature(Recording *recording, uint8_t **ptr) {
+  recording->current_row->temperature = (int16_t)swap16(*ptr + 1) / 100.0;
+  *ptr += 3;
+}
+
+void read_voltage(Recording *recording, uint8_t **ptr) {
+  recording->current_row->voltage = swap16(*ptr + 1) / 1000.0;
+  *ptr += 3;
+}
+
+void read_state(Recording *recording, uint8_t **ptr) {
+  recording->current_row->state = *(uint8_t *)(*ptr + 1);
+  *ptr += 2;
+}
+
 
