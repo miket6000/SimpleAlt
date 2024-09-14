@@ -60,7 +60,7 @@ void sync_altimeter(char *uid, uint8_t *altimeter_raw_data) {
     fclose(fpt);
     printf("Saved data as %s.\n", filename);
   } else {
-    printf("Local save file found (%s), comparing to altimeter data.\n", filename);
+    printf("Local save file found (%s), comparing to altimeter data...\n", filename);
     // Download index, and calculate checksum. Compare to file checksum over same area
     altimeter_get_data(altimeter_index, 0, ALTIMETER_INDEX_SIZE-1);
     fpt = fopen(filename, "rb");
@@ -84,7 +84,7 @@ void sync_altimeter(char *uid, uint8_t *altimeter_raw_data) {
   }
 }  
   
-uint8_t get_user_selection() {  
+void print_recordings() {  
   printf("The following recordings were found:\n");
 
   // present the options to the user
@@ -100,12 +100,6 @@ uint8_t get_user_selection() {
     );
     p_recording = get_recording(++recording_id);
   }
-
-  printf("\nWhich would you like to export?\n> ");
-  // get and validate user decision on which recording to download 
-  int selected_id = 0;
-  scanf("%d", &selected_id);
-  return selected_id;
 }
 
 void write_csv(char *filename, Recording *p_recording) {
@@ -144,20 +138,31 @@ int main(int argc, char **argv) {
   
   char *port_name = argv[1];
   char *uid = altimeter_connect(port_name);
+  char uid_entry[16];
 
   if (uid == NULL) {
-    printf("Could not connect to altimeter\n");
-    return 0;
+    printf("Could not connect to altimeter, enter a UID to load from file, or press return to exit:\n");
+    scanf("%s", uid_entry);
+    if (strlen(uid_entry) == 8) {
+      uid = uid_entry;
+    } else {
+      return 0;
+    }
+  } else {
+    printf("Successfully connected to altimeter (UID = %s).\n", uid);
+    sync_altimeter(uid, altimeter_raw_data);
   }
 
-  printf("Successfully connected to altimeter (UID = %s).\n", uid);
 
-  sync_altimeter(uid, altimeter_raw_data);
   parse_recordings(altimeter_raw_data);
-  
-  uint8_t selection = get_user_selection();
+  print_recordings();
 
-  Recording *p_recording = get_recording(selection);
+  printf("\nWhich would you like to export?\n> ");
+  // get and validate user decision on which recording to download 
+  int selected_id = 0;
+  scanf("%d", &selected_id);
+
+  Recording *p_recording = get_recording(selected_id);
   if (p_recording == NULL) {
     printf("Sorry, the input was not recognised.\n");
     return 0;
@@ -166,7 +171,7 @@ int main(int argc, char **argv) {
   // save the selected file.
   char base_filename[64];
   char filename[64];
-  sprintf(base_filename, "SimpleAlt_%s_%i", uid, selection);
+  sprintf(base_filename, "SimpleAlt_%s_%i", uid, selected_id);
   if (get_filename(filename, base_filename, "csv")) {
     write_csv(filename, p_recording);
   } else {

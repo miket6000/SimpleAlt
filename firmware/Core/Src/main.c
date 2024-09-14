@@ -45,7 +45,6 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define ALTITUDE_IN_METERS(x) (x / 100)
 
 #define STATE_IDLE 0
 #define STATE_RECORDING 1
@@ -69,7 +68,7 @@ uint16_t rx_buffer_index = 0;
 
 const int8_t idle_sequence[] = {1, PAUSE, -2};
 const int8_t usb_sequence[] = {0, -1};
-const int8_t recording_sequence[] = {2, -1}; 
+const int8_t recording_sequence[] = {1, 2, -2}; 
 const int8_t button_sequence[] = {1, 2, 3, PAUSE, -1};
 
 /* USER CODE END PV */
@@ -233,7 +232,7 @@ int main(void)
 
   uint32_t sample_rate_altitude = SECONDS_TO_TICKS(0.05);
   uint32_t sample_rate_temperature = SECONDS_TO_TICKS(1);
-  uint32_t sample_rate_pressure = 0;
+  uint32_t sample_rate_pressure = SECONDS_TO_TICKS(1);
   uint32_t sample_rate_voltage = SECONDS_TO_TICKS(1);
 
   /* USER CODE END 1 */
@@ -400,20 +399,20 @@ int main(void)
           last_state = state;
 
           // save the data
-          if (sample_rate_pressure != 0 && tick % sample_rate_pressure == 0) {
-            fs_save('P', &pressure, sizeof(pressure));
+          if (tick % sample_rate_altitude == 0) {
+            fs_save('A', &altitude,     sizeof(altitude));
+          }
+          
+          if (tick % sample_rate_pressure == 0) {
+            fs_save('P', &pressure,     sizeof(pressure));
           }
 
-          if (sample_rate_temperature != 0 && tick % sample_rate_temperature == 0) {
-            fs_save('T', &temperature, sizeof(temperature));
+          if (tick % sample_rate_temperature == 0) {
+            fs_save('T', &temperature,  sizeof(temperature));
           }
           
-          if (sample_rate_altitude != 0 && tick % sample_rate_altitude == 0) {
-            fs_save('A', &altitude, sizeof(altitude));
-          }
-          
-          if (sample_rate_voltage != 0 && tick % sample_rate_voltage == 0) {
-            fs_save('V', &voltage, sizeof(voltage));
+          if (tick % sample_rate_voltage == 0) {
+            fs_save('V', &voltage,      sizeof(voltage));
           }
 
           // ignore short press, proper press change to idle

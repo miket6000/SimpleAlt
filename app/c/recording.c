@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-static Recording recordings[255];
+static Recording recordings[255]; //Hmm, might want to dynamically allocate this instead...
 static uint8_t num_recordings = 0;
 static const float tick_duration = 0.01;
 
@@ -23,20 +23,19 @@ inline static uint32_t swap32(const uint8_t * const bytes) {
   return (uint32_t)((bytes[3] << 24) + (bytes[2] << 16) + (bytes[1] << 8) + bytes[0]);
 }
 
-bool is_highest_sampled_datatype(DataType datatype) {
-  uint16_t highest_sample_rate;
-  DataType highest_sampled_datatype = ALTITUDE;
+// We need to know the highest sampled datatype as reading this will trigger the creation
+// of a new row when reading the data from the altimeter. This ensures that we will have a 
+// new row every time the data changes. If multiple datatypes are recorded at the same maximum
+// datarate the first (lowest index) is used.
+void set_highest_sampled_datatype(Recording *recording) {
+  uint32_t highest_sample_rate = recording->sample_rates[0];
+  recording->highest_sampled_datatype = 0;
   for (uint8_t datatype = 0; datatype < NUM_DATATYPES; datatype++) {
-    uint16_t sample_rate = record_types[datatype].sample_rate;
+    uint16_t sample_rate = recording->sample_rates[datatype];
     if (sample_rate < highest_sample_rate && sample_rate != 0) {
-      highest_sample_rate = sample_rate;
-      highest_sampled_datatype = datatype;
+      recording->highest_sampled_datatype = datatype;
     }
   }
-  if (highest_sampled_datatype == datatype) {
-    return true;
-  }
-  return false;
 }
 
 Recording *get_recording(uint8_t index) {
@@ -64,29 +63,31 @@ void parse_recordings(uint8_t *data) {
   
   while (label != 0xff && i < ALTIMETER_INDEX_SIZE) {
     switch (label) {
-      case 'R':
+      
+      case 'r':
         // We know where the recording starts/ends and we know the sampling config
         // Now's as good a time as any to unpack the data.
         uint32_t length = value - recording_start_address;
-        add_recording(&data[recording_start_address], length);
+        add_recording(&recordings[num_recordings], &data[recording_start_address], length);
+        num_recordings += 1;
         recording_start_address = value;
         break;
-      case 'T':
+      case 't':
         record_types[TEMPERATURE].sample_rate = value;
         break;
-      case 'P':
+      case 'p':
         record_types[PRESSURE].sample_rate = value;
         break;
-      case 'V':
+      case 'v':
         record_types[VOLTAGE].sample_rate = value;
         break;
-      case 'A':
+      case 'a':
         record_types[ALTITUDE].sample_rate = value;
         break;
-      case 'S':
+      case 's':
         record_types[STATE].sample_rate = value;
         break;
-      case 'M':
+      case 'm':
         break;
       default:
         printf("[warning] Unknown label %c (0x%x), ignoring.\n", label, label);
@@ -101,13 +102,11 @@ void parse_recordings(uint8_t *data) {
 
 /* 
  * Determines whether this record was the record with the highest sample rate. 
- * If so, then we should create a new row which is a duplicate of the current
- * row so we can update the relevant fields. This keeps slower updating data still
- * in each row. 
- * Returns the new current row index.
+ * If so, then we should increment the current_row pointer to the next row and copy across all
+ * the data from the previous row. This keeps slower updating data in every row. 
  */
-void advance_row(Recording *recording, DataType datatype) {
-  if (is_highest_sampled_datatype(datatype)) {
+void advance_row(Recording *recording, const DataType datatype) {
+  if (datatype == recording->highest_sampled_datatype) {
     recording->current_row->time += (tick_duration * record_types[datatype].sample_rate);
     recording->current_row++;
     memcpy(recording->current_row, recording->current_row - 1, sizeof(RecordingRow));
@@ -115,7 +114,6 @@ void advance_row(Recording *recording, DataType datatype) {
 }
 
 /* 
- * A record is a full row in the ultimate csv file. 
  * We will go through the data and create a new row just after putting the item with
  * the highest sample rate into the current row. This ensures that we have a new row
  * every time something has changed.
@@ -125,13 +123,20 @@ void advance_row(Recording *recording, DataType datatype) {
  * that each recording uses the full flash available. This over allocates, but we 
  * won't run out. We rely on the application closing to free the mallocs.
  */
-void add_recording(uint8_t *data, uint32_t len) {
+void add_recording(Recording *recording, uint8_t *data, uint32_t len) {
   uint8_t *p_data = data;
   uint8_t *p_data_end = p_data + len;
+
   RecordingRow *rows = malloc(sizeof(RecordingRow) * (ALTIMETER_FLASH_SIZE - ALTIMETER_INDEX_SIZE));
-  Recording *recording = &recordings[num_recordings];
   recording->rows = rows;
   recording->current_row = rows;
+
+  // set default data_rates;
+  for (DataType datatype = 0; datatype < NUM_DATATYPES; datatype++) {
+    recording->sample_rates[datatype] = record_types[datatype].sample_rate;
+  }
+
+  set_highest_sampled_datatype(recording);
 
   while (p_data < p_data_end) {
     bool data_recognised = false;
@@ -150,8 +155,6 @@ void add_recording(uint8_t *data, uint32_t len) {
 
   recording->duration = (recording->current_row - 1)->time;
   recording->length = recording->current_row - recording->rows;
-
-  num_recordings += 1;
 
 }
 

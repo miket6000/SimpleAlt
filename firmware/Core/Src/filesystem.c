@@ -31,7 +31,7 @@ FSResult fs_init(SPI_HandleTypeDef *hspi, GPIO_TypeDef *cs_port, uint16_t cs_pin
   while ((next_free_index + block_size) <= INDEX_END_ADDRESS && data[0] != 0xFF) {
     next_free_index += block_size;
     w25qxx_read(&w25qxx, next_free_index, data, block_size);  
-    if (data[0] == 'R') {
+    if (data[0] == LABEL_RECORD_END) {
       next_free_address = *(uint32_t *)&data[1];
     }
   }
@@ -49,7 +49,7 @@ FSResult fs_stop() {
 
 FSResult fs_flush() {
   if (fs_state == FS_DIRTY) {
-    fs_save_config('R', &next_free_address);
+    fs_save_config(LABEL_RECORD_END, &next_free_address);
   }
   fs_state = FS_CLEAN;
   return FS_OK;
@@ -67,8 +67,9 @@ FSResult fs_save(char label, void *data, uint16_t len) {
   fs_state = FS_DIRTY;
 
   w25qxx_write(&w25qxx, next_free_address, (uint8_t *)&label, 1);
-  w25qxx_write(&w25qxx, next_free_address + 1, (uint8_t *)data, len);
-  next_free_address += (len + 1);
+  next_free_address += 1;
+  w25qxx_write(&w25qxx, next_free_address, (uint8_t *)data, len);
+  next_free_address += len;
   return FS_OK;
 }
 

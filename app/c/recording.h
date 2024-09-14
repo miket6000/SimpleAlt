@@ -19,6 +19,8 @@ typedef struct {
   float duration;
   float max_altitude;
   float ground_altitude;
+  uint16_t sample_rates[NUM_DATATYPES];
+  DataType highest_sampled_datatype;
   uint32_t length;
   RecordingRow *rows;
   RecordingRow *current_row;
@@ -33,7 +35,7 @@ typedef struct {
 
 Recording *get_recording(uint8_t index);
 void parse_recordings(uint8_t *data);
-void add_recording(uint8_t *data, uint32_t length);
+void add_recording(Recording *recording, uint8_t *data, uint32_t length);
 
 void read_altitude(Recording *recording, uint8_t **ptr);
 void read_pressure(Recording *recording, uint8_t **ptr);
