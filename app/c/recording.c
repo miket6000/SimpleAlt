@@ -8,12 +8,23 @@ static Recording recordings[255]; //Hmm, might want to dynamically allocate this
 static uint8_t num_recordings = 0;
 static const float tick_duration = 0.01;
 
+static SettingType settings[] = {
+  {"Altitude Sample Rate",    'a',  5,        read_uint32},
+  {"Pressure Sample Rate",    'p',  0,        read_uint32},
+  {"Temperature Sample Rate", 't',  100,      read_uint32},
+  {"Voltage Sample Rate",     'v',  100,      read_uint32},
+  {"State Sample Rate",       's',  0,        read_uint32},
+  {"Maxumum Altitude",        'm',  0,        read_uint32},
+  {"Power Off Timeout",       'o',  12000,    read_uint32},
+  {"Recording End Address",   'r',  0x10000,  read_uint32},
+};
+
 static RecordType record_types[] = {
-  {"Altitude",    'A', 5,    read_altitude},
-  {"Pressure",    'P', 0,    read_pressure},
-  {"Temperature", 'T', 100,  read_temperature},
-  {"Voltage",     'V', 100,  read_voltage},
-  {"State",       'S', 0,    read_state},
+  {"Altitude",    'A', &settings[0], read_altitude},
+  {"Pressure",    'P', &settings[1], read_pressure},
+  {"Temperature", 'T', &settings[2], read_temperature},
+  {"Voltage",     'V', &settings[3], read_voltage},
+  {"State",       'S', &settings[4], read_state},
 };
 
 inline static uint16_t swap16(const uint8_t * const bytes) {
@@ -27,13 +38,13 @@ inline static uint32_t swap32(const uint8_t * const bytes) {
 // of a new row when reading the data from the altimeter. This ensures that we will have a 
 // new row every time the data changes. If multiple datatypes are recorded at the same maximum
 // datarate the first (lowest index) is used.
-void set_highest_sampled_datatype(Recording *recording) {
+void set_highest_sampled_record_type(Recording *recording) {
   uint32_t highest_sample_rate = recording->sample_rates[0];
-  recording->highest_sampled_datatype = 0;
-  for (uint8_t datatype = 0; datatype < NUM_DATATYPES; datatype++) {
+  recording->highest_sampled_record_type = 0;
+  for (uint8_t datatype = 0; datatype < NUM_RECORD_TYPES; datatype++) {
     uint16_t sample_rate = recording->sample_rates[datatype];
     if (sample_rate < highest_sample_rate && sample_rate != 0) {
-      recording->highest_sampled_datatype = datatype;
+      recording->highest_sampled_record_type = datatype;
     }
   }
 }
@@ -46,57 +57,25 @@ Recording *get_recording(uint8_t index) {
   return &recordings[index];
 } 
 
-RecordType *get_record_type(char label) {
-  for (DataType datatype = 0; datatype < NUM_DATATYPES; datatype++) {
-    if (record_types[datatype].label == label) {
-      return &record_types[datatype];
-    }
-  }
-  return NULL;
-}
-
 void parse_recordings(uint8_t *data) { 
-  uint8_t label = data[0];
-  uint32_t value = swap32(&data[1]);
-  int i = 0;
+  uint8_t *p_data = data;
+  uint8_t *p_data_end = p_data + ALTIMETER_INDEX_SIZE;
   uint32_t recording_start_address = ALTIMETER_INDEX_SIZE;
-  
-  while (label != 0xff && i < ALTIMETER_INDEX_SIZE) {
-    switch (label) {
-      
-      case 'r':
-        // We know where the recording starts/ends and we know the sampling config
-        // Now's as good a time as any to unpack the data.
-        uint32_t length = value - recording_start_address;
-        add_recording(&recordings[num_recordings], &data[recording_start_address], length);
-        num_recordings += 1;
-        recording_start_address = value;
-        break;
-      case 't':
-        record_types[TEMPERATURE].sample_rate = value;
-        break;
-      case 'p':
-        record_types[PRESSURE].sample_rate = value;
-        break;
-      case 'v':
-        record_types[VOLTAGE].sample_rate = value;
-        break;
-      case 'a':
-        record_types[ALTITUDE].sample_rate = value;
-        break;
-      case 's':
-        record_types[STATE].sample_rate = value;
-        break;
-      case 'm':
-        break;
-      default:
-        printf("[warning] Unknown label %c (0x%x), ignoring.\n", label, label);
-        break;
+  Recording *recording = &recordings[0];
+
+  while (*p_data != 0xff && p_data < p_data_end) {
+    for (int setting = 0; setting < NUM_SETTINGS; setting++) {
+      if (*p_data == settings[setting].label) {
+        settings[setting].read(&settings[setting].value, &p_data);
+        if (settings[setting].label == 'r') {
+          uint32_t length = settings[setting].value - recording_start_address;
+          add_recording(recording, &data[recording_start_address], length);
+          num_recordings += 1;
+          recording = &recordings[num_recordings];
+          recording_start_address = settings[setting].value;
+        }
+      } 
     }
-    // get ready for the next item in the index.
-    i += 5;
-    label = data[i];
-    value =swap32(&data[i+1]);
   }
 }
 
@@ -105,11 +84,11 @@ void parse_recordings(uint8_t *data) {
  * If so, then we should increment the current_row pointer to the next row and copy across all
  * the data from the previous row. This keeps slower updating data in every row. 
  */
-void advance_row(Recording *recording, const DataType datatype) {
-  if (datatype == recording->highest_sampled_datatype) {
-    recording->current_row->time += (tick_duration * record_types[datatype].sample_rate);
+void advance_row(Recording *recording, const uint8_t datatype) {
+  if (datatype == recording->highest_sampled_record_type) {
     recording->current_row++;
     memcpy(recording->current_row, recording->current_row - 1, sizeof(RecordingRow));
+    recording->current_row->time += (tick_duration * settings[datatype].value); 
   }
 }
 
@@ -132,15 +111,15 @@ void add_recording(Recording *recording, uint8_t *data, uint32_t len) {
   recording->current_row = rows;
 
   // set default data_rates;
-  for (DataType datatype = 0; datatype < NUM_DATATYPES; datatype++) {
-    recording->sample_rates[datatype] = record_types[datatype].sample_rate;
+  for (uint8_t datatype = 0; datatype < NUM_RECORD_TYPES; datatype++) {
+    recording->sample_rates[datatype] = record_types[datatype].setting->value;
   }
 
-  set_highest_sampled_datatype(recording);
+  set_highest_sampled_record_type(recording);
 
   while (p_data < p_data_end) {
     bool data_recognised = false;
-    for (int data_type = 0; data_type < NUM_DATATYPES; data_type++) {
+    for (int data_type = 0; data_type < NUM_RECORD_TYPES; data_type++) {
       if (record_types[data_type].label == *p_data) {
         data_recognised = true;
         record_types[data_type].read(recording, &p_data);
@@ -178,6 +157,12 @@ void read_altitude(Recording *recording, uint8_t **ptr) {
   *ptr += 5;
 }
 
+void read_uint32(void *dest, uint8_t **ptr) {
+  *(uint32_t *)dest = swap32(*ptr + 1);
+  *ptr += 5;
+}
+
+
 void read_pressure(Recording *recording, uint8_t **ptr) {
   recording->current_row->pressure = swap32(*ptr + 1) / 100.0;
   *ptr += 5;
@@ -197,5 +182,4 @@ void read_state(Recording *recording, uint8_t **ptr) {
   recording->current_row->state = *(uint8_t *)(*ptr + 1);
   *ptr += 2;
 }
-
 

@@ -4,7 +4,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-typedef enum {ALTITUDE, PRESSURE, TEMPERATURE, VOLTAGE, STATE, NUM_DATATYPES} DataType;
+#define NUM_SETTINGS      8
+#define NUM_RECORD_TYPES  5
 
 typedef struct {
   float time;
@@ -19,17 +20,24 @@ typedef struct {
   float duration;
   float max_altitude;
   float ground_altitude;
-  uint16_t sample_rates[NUM_DATATYPES];
-  DataType highest_sampled_datatype;
+  uint16_t sample_rates[NUM_RECORD_TYPES];
+  uint8_t highest_sampled_record_type;
   uint32_t length;
   RecordingRow *rows;
   RecordingRow *current_row;
 } Recording;
 
+typedef struct SettingType {
+  char Title[24];
+  char label;
+  uint32_t value;
+  void (* read)(void *, uint8_t **);
+} SettingType;
+
 typedef struct {
   char Title[16];
   char label;
-  uint16_t sample_rate;
+  SettingType *setting;
   void (* read)(Recording *, uint8_t **);
 } RecordType;
 
@@ -43,9 +51,6 @@ void read_temperature(Recording *recording, uint8_t **ptr);
 void read_voltage(Recording *recording, uint8_t **ptr);
 void read_state(Recording *recording, uint8_t **ptr);
 
-
-
-
-
+void read_uint32(void *dest, uint8_t **ptr);
 
 #endif //RECORDING_H

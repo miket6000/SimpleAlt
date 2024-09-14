@@ -65,6 +65,7 @@ extern uint8_t UserTxBufferFS[APP_TX_DATA_SIZE];
 uint8_t rx_buffer[APP_RX_DATA_SIZE];
 uint16_t tx_buffer_index = 0;
 uint16_t rx_buffer_index = 0;
+uint32_t uid = 0;
 
 const int8_t idle_sequence[] = {1, PAUSE, -2};
 const int8_t usb_sequence[] = {0, -1};
@@ -204,7 +205,6 @@ void get_config() {
 }
 
 void get_uid() {
-  uint32_t uid = fs_get_uid();
   char str_buf[10] = {0};
   print(itoa(uid, str_buf, 16), strlen(str_buf));
 }
@@ -264,6 +264,7 @@ int main(void)
 
   bmp_init(BMP_CS_GPIO_Port, BMP_CS_Pin);
   fs_init(&hspi1, FLASH_CS_GPIO_Port, FLASH_CS_Pin);
+  uid = fs_get_uid();
   
   fs_read_config('P', &sample_rate_pressure);
   fs_read_config('T', &sample_rate_temperature);
