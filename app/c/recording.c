@@ -51,7 +51,7 @@ void set_highest_sampled_record_type(Recording *recording) {
   for (uint8_t type = 0; type < NUM_RECORD_TYPES; type++) {
     uint16_t sample_rate = recording->sample_rates[type];
     if (sample_rate < highest_sample_rate && sample_rate != 0) {
-      printf("Record Type: %s has sample rate %d, compared to %d\n", record_types[type].title, sample_rate, highest_sample_rate);
+      highest_sample_rate = sample_rate;
       recording->highest_sampled_record_type = type;
     }
   }
@@ -67,8 +67,8 @@ Recording *get_recording(uint8_t index) {
 
 void parse_recordings(uint8_t *data) { 
   uint8_t *p_data = data;
-  uint8_t *p_data_end = p_data + ALTIMETER_INDEX_SIZE;
-  uint32_t recording_start_address = ALTIMETER_INDEX_SIZE;
+  uint8_t *p_data_end = p_data + ALTIMETER_INDEX_SIZE - 1;
+  uint32_t recording_start_address = ALTIMETER_INDEX_SIZE - 1;
   Recording *recording = &recordings[0];
 
   while (*p_data != 0xff && p_data < p_data_end) {

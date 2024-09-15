@@ -80,16 +80,14 @@ void sync_altimeter(char *uid, uint8_t *altimeter_raw_data) {
     printf("Saved data as %s.\n", filename);
   } else {
     printf("Local save file found for altimeter %s, comparing to altimeter data...\n", uid);
-    // Download index, and calculate checksum. Compare to file checksum over same area
     altimeter_get_data(altimeter_index, 0, ALTIMETER_INDEX_SIZE-1);
-
     difference = diff(altimeter_index, altimeter_raw_data, ALTIMETER_INDEX_SIZE);
 
     if (difference < ALTIMETER_INDEX_SIZE) {
       printf("Local save file and altimeter are different, updating local copy...\n");
       // we've already downloaded the index, just copy it across, then grab the rest
       memcpy(altimeter_raw_data, altimeter_index, ALTIMETER_INDEX_SIZE);
-      altimeter_get_data(&altimeter_raw_data[ALTIMETER_INDEX_SIZE], ALTIMETER_INDEX_SIZE, ALTIMETER_FLASH_SIZE-1);
+      altimeter_get_data(&altimeter_raw_data[ALTIMETER_INDEX_SIZE - 1], ALTIMETER_INDEX_SIZE, ALTIMETER_FLASH_SIZE-1);
       filename = write_altimeter_to_file(uid, altimeter_raw_data);
     } else {
       printf("No difference found, local save file is up to date.\n");
