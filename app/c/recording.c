@@ -7,6 +7,13 @@
 static Recording recordings[255]; //Hmm, might want to dynamically allocate this instead...
 static uint8_t num_recordings = 0;
 static const float tick_duration = 0.01;
+char info[255];
+
+void write_log(char* str) {
+  FILE *fpt = fopen("simple.log", "a");
+  fwrite(str, sizeof(char), strlen(str), fpt);
+  fclose(fpt);
+}
 
 static SettingType settings[] = {
   {"Altitude Sample Rate",    'a',  5,        read_uint32},
@@ -16,7 +23,7 @@ static SettingType settings[] = {
   {"State Sample Rate",       's',  0,        read_uint32},
   {"Maxumum Altitude",        'm',  0,        read_uint32},
   {"Power Off Timeout",       'o',  12000,    read_uint32},
-  {"Recording End Address",   'r',  0x10000,  read_uint32},
+  {"Recording End Address",   'r',  0x10000-1,  read_uint32},
 };
 
 static RecordType record_types[] = {
@@ -34,17 +41,18 @@ inline static uint32_t swap32(const uint8_t * const bytes) {
   return (uint32_t)((bytes[3] << 24) + (bytes[2] << 16) + (bytes[1] << 8) + bytes[0]);
 }
 
-// We need to know the highest sampled datatype as reading this will trigger the creation
+// We need to know the highest sampled type as reading this will trigger the creation
 // of a new row when reading the data from the altimeter. This ensures that we will have a 
-// new row every time the data changes. If multiple datatypes are recorded at the same maximum
+// new row every time the data changes. If multiple types are recorded at the same maximum
 // datarate the first (lowest index) is used.
 void set_highest_sampled_record_type(Recording *recording) {
-  uint32_t highest_sample_rate = recording->sample_rates[0];
+  uint32_t highest_sample_rate = 0xffffffff;
   recording->highest_sampled_record_type = 0;
-  for (uint8_t datatype = 0; datatype < NUM_RECORD_TYPES; datatype++) {
-    uint16_t sample_rate = recording->sample_rates[datatype];
+  for (uint8_t type = 0; type < NUM_RECORD_TYPES; type++) {
+    uint16_t sample_rate = recording->sample_rates[type];
     if (sample_rate < highest_sample_rate && sample_rate != 0) {
-      recording->highest_sampled_record_type = datatype;
+      printf("Record Type: %s has sample rate %d, compared to %d\n", record_types[type].title, sample_rate, highest_sample_rate);
+      recording->highest_sampled_record_type = type;
     }
   }
 }
@@ -67,8 +75,12 @@ void parse_recordings(uint8_t *data) {
     for (int setting = 0; setting < NUM_SETTINGS; setting++) {
       if (*p_data == settings[setting].label) {
         settings[setting].read(&settings[setting].value, &p_data);
+        sprintf(info, "Read label %c with value 0x%.8x\n", settings[setting].label, settings[setting].value);
+        write_log(info);
         if (settings[setting].label == 'r') {
           uint32_t length = settings[setting].value - recording_start_address;
+          sprintf(info, "New record starting at 0x%.8x\n", recording_start_address);
+          write_log(info);
           add_recording(recording, &data[recording_start_address], length);
           num_recordings += 1;
           recording = &recordings[num_recordings];
@@ -84,13 +96,14 @@ void parse_recordings(uint8_t *data) {
  * If so, then we should increment the current_row pointer to the next row and copy across all
  * the data from the previous row. This keeps slower updating data in every row. 
  */
-void advance_row(Recording *recording, const uint8_t datatype) {
-  if (datatype == recording->highest_sampled_record_type) {
+void advance_row(Recording *recording, const uint8_t type) {
+  if (type == recording->highest_sampled_record_type) {
     recording->current_row++;
     memcpy(recording->current_row, recording->current_row - 1, sizeof(RecordingRow));
-    recording->current_row->time += (tick_duration * settings[datatype].value); 
+    recording->current_row->time += (tick_duration * settings[type].value); 
   }
 }
+
 
 /* 
  * We will go through the data and create a new row just after putting the item with
@@ -107,34 +120,36 @@ void add_recording(Recording *recording, uint8_t *data, uint32_t len) {
   uint8_t *p_data_end = p_data + len;
 
   RecordingRow *rows = malloc(sizeof(RecordingRow) * (ALTIMETER_FLASH_SIZE - ALTIMETER_INDEX_SIZE));
+  
   recording->rows = rows;
   recording->current_row = rows;
 
   // set default data_rates;
-  for (uint8_t datatype = 0; datatype < NUM_RECORD_TYPES; datatype++) {
-    recording->sample_rates[datatype] = record_types[datatype].setting->value;
+  for (uint8_t type = 0; type < NUM_RECORD_TYPES; type++) {
+    recording->sample_rates[type] = record_types[type].setting->value;
   }
 
   set_highest_sampled_record_type(recording);
 
   while (p_data < p_data_end) {
     bool data_recognised = false;
-    for (int data_type = 0; data_type < NUM_RECORD_TYPES; data_type++) {
-      if (record_types[data_type].label == *p_data) {
+    for (int type = 0; type < NUM_RECORD_TYPES; type++) {
+      if (record_types[type].label == *p_data) {
         data_recognised = true;
-        record_types[data_type].read(recording, &p_data);
-        advance_row(recording, data_type);
+        record_types[type].read(recording, &p_data);
+        sprintf(info, "Read record %c\n", record_types[type].label);
+        write_log(info);
+        advance_row(recording, type);
       }
     }
     if (!data_recognised) {
-      printf("[warning] label %c (0x%.2x) at address 0x%.8x not recognised\n", *p_data, *p_data, *p_data); 
+      printf("Unrecoginsed label %c\n", *p_data);
       p_data++;
     }
   }
-
-  recording->duration = (recording->current_row - 1)->time;
+  
+  recording->duration = recording->current_row->time;
   recording->length = recording->current_row - recording->rows;
-
 }
 
 

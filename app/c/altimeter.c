@@ -35,11 +35,13 @@ char *altimeter_connect(const char * const port_name) {
   sp_set_stopbits(port, 1);
   sp_set_flowcontrol(port, SP_FLOWCONTROL_NONE);
   
-  //Not sure why this fails occasionally, but until I figure it out, I can fudge it...
+  //Occasionally the below code fails and returns a '\n' instead of the UID. Not sure why...
   uint8_t retries = 0;
-  while (uid[0] == '\0' && retries < 3) {
+  uint8_t dump[1000];
+  while ((uid[0] == '\0' || uid[0] == '\n') && retries < 3) {
     sp_blocking_write(port, "\n", 1, timeout);    // flush altimeter input buffer
     sp_blocking_write(port, "i\n", 2, timeout);   // turn off interactive mode
+    sp_blocking_read(port, &dump, 1000, timeout); // empty rx buffer
     sp_blocking_write(port, "UID\n", 4, timeout); // get UID
     sp_blocking_read(port, &uid, UID_LENGTH, timeout);
     retries++;

@@ -5,18 +5,25 @@
 #include "led.h"
 #include "filesystem.h"
 
-#define VOLTAGE_OFFSET  200
-#define VOLTAGE_SLOPE 6200
+#define VOLTAGE_OFFSET    200
+#define NUM_ADC_BITS      12
+#define VOLTAGE_SLOPE     6200
+#define MIN_TIMEOUT       60
 // If running without a battery you must set the alarm voltage to 0
 #define VOLTAGE_LOW_ALARM 3000 
-#define IDLE_TIMEOUT SECONDS_TO_TICKS(1200)
 
 static uint16_t voltage = 0;
 static PowerMode power_mode = SNOOZE;
-static uint32_t idle_timer = IDLE_TIMEOUT;
+static uint32_t idle_timeout = SECONDS_TO_TICKS(1200);
+static uint32_t idle_timer = SECONDS_TO_TICKS(1200);
 
 void power_set_mode(PowerMode mode) {
   power_mode = mode;  
+}
+
+void power_set_timeout(uint32_t timeout) {
+  idle_timeout = timeout;
+  idle_timer = timeout;
 }
 
 void power_tick() {
@@ -41,13 +48,13 @@ void power_tick() {
       break;
   }
 
-  if (idle_timer-- == 0) {
+  if (idle_timer-- == 0 && idle_timeout > MIN_TIMEOUT) {
     power_mode = SLEEP;
   }
 }
 
 void power_idle_reset() {
-  idle_timer = IDLE_TIMEOUT;
+  idle_timer = idle_timeout;
 }
 
 void power_management() {
@@ -76,7 +83,7 @@ void power_management() {
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 {
-    voltage = ((HAL_ADC_GetValue(hadc) * VOLTAGE_SLOPE) >> 12) + VOLTAGE_OFFSET;
+    voltage = ((HAL_ADC_GetValue(hadc) * VOLTAGE_SLOPE) >> NUM_ADC_BITS) + VOLTAGE_OFFSET;
 }
 
 uint16_t power_get_battery_voltage(void) {

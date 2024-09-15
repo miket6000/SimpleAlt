@@ -28,14 +28,14 @@ typedef struct {
 } Recording;
 
 typedef struct SettingType {
-  char Title[24];
+  char title[24];
   char label;
   uint32_t value;
   void (* read)(void *, uint8_t **);
 } SettingType;
 
 typedef struct {
-  char Title[16];
+  char title[16];
   char label;
   SettingType *setting;
   void (* read)(Recording *, uint8_t **);

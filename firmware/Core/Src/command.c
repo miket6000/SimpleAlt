@@ -6,7 +6,7 @@
 
 #define RX_BUFFER_LEN 32U
 #define TERM_CHAR '\n'
-#define DELIM " \0"
+#define DELIM " "
 #define MAX_NUM_COMMANDS 16
 
 static char rx_buffer[RX_BUFFER_LEN] = {0};

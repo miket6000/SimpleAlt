@@ -69,7 +69,7 @@ uint32_t uid = 0;
 
 const int8_t idle_sequence[] = {1, PAUSE, -2};
 const int8_t usb_sequence[] = {0, -1};
-const int8_t recording_sequence[] = {1, 2, -2}; 
+const int8_t recording_sequence[] = {2, -1}; 
 const int8_t button_sequence[] = {1, 2, 3, PAUSE, -1};
 
 /* USER CODE END PV */
@@ -186,14 +186,14 @@ void read_flash_binary() {
 
 void erase_flash() {
   fs_erase();
-  print("OK\n", 3);
+  print("OK", 2);
 }
 
 void set_config() {
   char *label = cmd_get_param();
   uint32_t value = atoi(cmd_get_param());
   fs_save_config(label[0], &value);
-  print("OK\n", 3); 
+  print("OK", 2); 
 }
 
 void get_config() {
@@ -221,19 +221,24 @@ int main(void)
   uint32_t tick = 0;
   uint32_t last_tick = 0;
   
-  int32_t altitude = 0;
   int32_t ground_altitude = 0;
   int32_t altitude_above_ground = 0;
   uint32_t max_altitude = 0;
-  
+
+  uint32_t timeout = SECONDS_TO_TICKS(1200);
+
+  int32_t altitude = 0;
   int16_t temperature = 0;
   uint32_t pressure = 101325;
   uint16_t voltage = 0;
+  uint8_t status = 0;
 
+  // sample rate variables initiated with default values
   uint32_t sample_rate_altitude = SECONDS_TO_TICKS(0.05);
   uint32_t sample_rate_temperature = SECONDS_TO_TICKS(1);
-  uint32_t sample_rate_pressure = SECONDS_TO_TICKS(1);
+  uint32_t sample_rate_pressure = 0;
   uint32_t sample_rate_voltage = SECONDS_TO_TICKS(1);
+  uint32_t sample_rate_status = 0;
 
   /* USER CODE END 1 */
 
@@ -266,11 +271,15 @@ int main(void)
   fs_init(&hspi1, FLASH_CS_GPIO_Port, FLASH_CS_Pin);
   uid = fs_get_uid();
   
-  fs_read_config('P', &sample_rate_pressure);
-  fs_read_config('T', &sample_rate_temperature);
-  fs_read_config('A', &sample_rate_altitude);
-  fs_read_config('V', &sample_rate_voltage);
-  fs_read_config('M', &max_altitude);
+  fs_read_config('p', &sample_rate_pressure);
+  fs_read_config('t', &sample_rate_temperature);
+  fs_read_config('a', &sample_rate_altitude);
+  fs_read_config('v', &sample_rate_voltage);
+  fs_read_config('s', &sample_rate_status);
+  fs_read_config('m', &max_altitude);
+  fs_read_config('o', &timeout);
+
+  power_set_timeout(SECONDS_TO_TICKS(timeout));
 
   if (max_altitude > 0) {
     led_add_number_sequence(max_altitude);
@@ -414,6 +423,10 @@ int main(void)
           
           if (tick % sample_rate_voltage == 0) {
             fs_save('V', &voltage,      sizeof(voltage));
+          }
+          
+          if (tick % sample_rate_status == 0) {
+            fs_save('S', &status,       sizeof(status));
           }
 
           // ignore short press, proper press change to idle
