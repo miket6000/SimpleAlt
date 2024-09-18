@@ -85,9 +85,10 @@ void sync_altimeter(char *uid, uint8_t *altimeter_raw_data) {
 
     if (difference < ALTIMETER_INDEX_SIZE) {
       printf("Local save file and altimeter are different, updating local copy...\n");
+      printf("(%.2x != %.2x @ %.8x)\n", altimeter_index[difference], altimeter_raw_data[difference], difference);
       // we've already downloaded the index, just copy it across, then grab the rest
       memcpy(altimeter_raw_data, altimeter_index, ALTIMETER_INDEX_SIZE);
-      altimeter_get_data(&altimeter_raw_data[ALTIMETER_INDEX_SIZE - 1], ALTIMETER_INDEX_SIZE, ALTIMETER_FLASH_SIZE-1);
+      altimeter_get_data(&altimeter_raw_data[ALTIMETER_INDEX_SIZE], ALTIMETER_INDEX_SIZE, ALTIMETER_FLASH_SIZE-1);
       filename = write_altimeter_to_file(uid, altimeter_raw_data);
     } else {
       printf("No difference found, local save file is up to date.\n");

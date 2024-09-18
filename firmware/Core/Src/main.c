@@ -35,6 +35,7 @@
 #include "command.h"
 #include "button.h"
 #include "filesystem.h"
+#include <stdbool.h>
 
 /* USER CODE END Includes */
 
@@ -66,6 +67,7 @@ uint8_t rx_buffer[APP_RX_DATA_SIZE];
 uint16_t tx_buffer_index = 0;
 uint16_t rx_buffer_index = 0;
 uint32_t uid = 0;
+uint8_t usb_connect = 1;
 
 const int8_t idle_sequence[] = {1, PAUSE, -2};
 const int8_t usb_sequence[] = {0, -1};
@@ -77,14 +79,11 @@ const int8_t button_sequence[] = {1, 2, 3, PAUSE, -1};
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-uint8_t Button(void);
 void USBD_CDC_RxHandler(uint8_t *rxBuffer, uint32_t len);
 void USB_Connect(void);
 void USB_Disconnect(void);
 void print(char *tx_buffer, uint16_t len);
-void led_blink(void);
-//measure_battery_voltage();
-uint8_t read_button(void);
+void set_clock_divider(uint8_t divider);
 
 /* USER CODE END PFP */
 
@@ -256,12 +255,12 @@ int main(void)
 
   /* USER CODE BEGIN SysInit */
   // Set tick to be 10ms
+  set_clock_divider(RCC_SYSCLK_DIV4); 
   HAL_SYSTICK_Config(HAL_RCC_GetHCLKFreq()/100);
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_DMA_Init();
   MX_ADC_Init();
   MX_SPI1_Init();
   MX_USB_DEVICE_Init();
@@ -409,23 +408,23 @@ int main(void)
           last_state = state;
 
           // save the data
-          if (tick % sample_rate_altitude == 0) {
+          if (sample_rate_altitude != 0 && tick % sample_rate_altitude == 0) {
             fs_save('A', &altitude,     sizeof(altitude));
           }
           
-          if (tick % sample_rate_pressure == 0) {
+          if (sample_rate_pressure != 0 && tick % sample_rate_pressure == 0) {
             fs_save('P', &pressure,     sizeof(pressure));
           }
 
-          if (tick % sample_rate_temperature == 0) {
+          if (sample_rate_temperature != 0 && tick % sample_rate_temperature == 0) {
             fs_save('T', &temperature,  sizeof(temperature));
           }
           
-          if (tick % sample_rate_voltage == 0) {
+          if (sample_rate_voltage != 0 && tick % sample_rate_voltage == 0) {
             fs_save('V', &voltage,      sizeof(voltage));
           }
           
-          if (tick % sample_rate_status == 0) {
+          if (sample_rate_status != 0 && tick % sample_rate_status == 0) {
             fs_save('S', &status,       sizeof(status));
           }
 
@@ -444,7 +443,7 @@ int main(void)
 
     /* Deal with data recieved via USB */
     if (rx_buffer_index > 0) {
-      power_set_mode(AWAKE); //Dirty hack
+      //power_set_mode(AWAKE); //Dirty hack
       power_idle_reset(); //don't go to sleep if actively in use
       cmd_read_input((char *)rx_buffer, rx_buffer_index);
       rx_buffer_index = 0;
@@ -456,9 +455,22 @@ int main(void)
         tx_buffer_index = 0;
       }
     }
-   
+  
+
     // Pause execution until woken by an interrupt.
     // The systick will do this for us every 10 ms if we're in normal mode.
+    if (usb_connect == 2) {
+      set_clock_divider(RCC_SYSCLK_DIV1);
+      HAL_SYSTICK_Config(HAL_RCC_GetHCLKFreq()/100);
+      usb_connect = 1;
+    }
+
+    if (usb_connect == 0) {
+      set_clock_divider(RCC_SYSCLK_DIV4);
+      HAL_SYSTICK_Config(HAL_RCC_GetHCLKFreq()/100);
+      usb_connect = 1;
+    }
+
     power_management();
   }
   /* USER CODE END 3 */
@@ -492,7 +504,7 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI48;
-  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV2;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
 
   if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1) != HAL_OK)
@@ -508,6 +520,23 @@ void SystemClock_Config(void)
   }
 }
 
+void set_clock_divider(uint8_t divider) {
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+
+  /** Initializes the CPU, AHB and APB buses clocks
+  */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                              |RCC_CLOCKTYPE_PCLK1;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI48;
+  RCC_ClkInitStruct.AHBCLKDivider = divider;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
+
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+}
+
 /* USER CODE BEGIN 4 */
 void USBD_CDC_RxHandler(uint8_t *rxBuffer, uint32_t len) {
   //DANGER - does not check for rx_buffer over run.
@@ -516,11 +545,11 @@ void USBD_CDC_RxHandler(uint8_t *rxBuffer, uint32_t len) {
 }
 
 void USB_Connect(void) {
-  // Doing anything at all in this function tends to result in the application faulting  
+  usb_connect = 2;
 }
 
 void USB_Disconnect(void) {
-  // Doing anything at all in this function tends to result in the application faulting
+  usb_connect = 0;
 }
 
 /* USER CODE END 4 */

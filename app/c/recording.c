@@ -9,11 +9,7 @@ static uint8_t num_recordings = 0;
 static const float tick_duration = 0.01;
 char info[255];
 
-void write_log(char* str) {
-  FILE *fpt = fopen("simple.log", "a");
-  fwrite(str, sizeof(char), strlen(str), fpt);
-  fclose(fpt);
-}
+//FILE *log = fopen("simple.log", "a");
 
 static SettingType settings[] = {
   {"Altitude Sample Rate",    'a',  5,        read_uint32},
@@ -23,7 +19,7 @@ static SettingType settings[] = {
   {"State Sample Rate",       's',  0,        read_uint32},
   {"Maxumum Altitude",        'm',  0,        read_uint32},
   {"Power Off Timeout",       'o',  12000,    read_uint32},
-  {"Recording End Address",   'r',  0x10000-1,  read_uint32},
+  {"Recording End Address",   'r',  0xffff,   read_uint32},
 };
 
 static RecordType record_types[] = {
@@ -68,19 +64,15 @@ Recording *get_recording(uint8_t index) {
 void parse_recordings(uint8_t *data) { 
   uint8_t *p_data = data;
   uint8_t *p_data_end = p_data + ALTIMETER_INDEX_SIZE - 1;
-  uint32_t recording_start_address = ALTIMETER_INDEX_SIZE - 1;
+  uint32_t recording_start_address = ALTIMETER_INDEX_SIZE;
   Recording *recording = &recordings[0];
 
   while (*p_data != 0xff && p_data < p_data_end) {
     for (int setting = 0; setting < NUM_SETTINGS; setting++) {
       if (*p_data == settings[setting].label) {
         settings[setting].read(&settings[setting].value, &p_data);
-        sprintf(info, "Read label %c with value 0x%.8x\n", settings[setting].label, settings[setting].value);
-        write_log(info);
         if (settings[setting].label == 'r') {
           uint32_t length = settings[setting].value - recording_start_address;
-          sprintf(info, "New record starting at 0x%.8x\n", recording_start_address);
-          write_log(info);
           add_recording(recording, &data[recording_start_address], length);
           num_recordings += 1;
           recording = &recordings[num_recordings];
@@ -137,13 +129,11 @@ void add_recording(Recording *recording, uint8_t *data, uint32_t len) {
       if (record_types[type].label == *p_data) {
         data_recognised = true;
         record_types[type].read(recording, &p_data);
-        sprintf(info, "Read record %c\n", record_types[type].label);
-        write_log(info);
         advance_row(recording, type);
       }
     }
     if (!data_recognised) {
-      printf("Unrecoginsed label %c\n", *p_data);
+      printf("[warning] Unrecognised label 0x%.2x (%c) @ 0x%.8lx\n", *p_data, *p_data, p_data - data);
       p_data++;
     }
   }

@@ -17,10 +17,10 @@ static struct sp_port *port;
 static uint32_t addresses[MAX_NUM_ADDRESSES];
 static uint32_t num_addresses = 0;
 static char uid[UID_LENGTH + 1] = {0}; // +1 for null terminated string
-
 static int altimeter_get_block(uint8_t *buffer, uint32_t start_address, uint8_t len);
 
 char *altimeter_connect(const char * const port_name) {
+  char dummy[1000];
   if (sp_get_port_by_name(port_name, &port) != SP_OK) {
     return (NULL);
   }
@@ -35,18 +35,12 @@ char *altimeter_connect(const char * const port_name) {
   sp_set_stopbits(port, 1);
   sp_set_flowcontrol(port, SP_FLOWCONTROL_NONE);
   
-  //Occasionally the below code fails and returns a '\n' instead of the UID. Not sure why...
-  uint8_t retries = 0;
-  uint8_t dump[1000];
-  while ((uid[0] == '\0' || uid[0] == '\n') && retries < 3) {
-    sp_blocking_write(port, "\n", 1, timeout);    // flush altimeter input buffer
-    sp_blocking_write(port, "i\n", 2, timeout);   // turn off interactive mode
-    sp_blocking_read(port, &dump, 1000, timeout); // empty rx buffer
-    sp_blocking_write(port, "UID\n", 4, timeout); // get UID
-    sp_blocking_read(port, &uid, UID_LENGTH, timeout);
-    retries++;
-  }
-
+  sp_blocking_write(port, "\n", 1, timeout);    // flush altimeter output buffer
+  sp_blocking_write(port, "i\n", 2, timeout);   // turn off interactive mode
+  sp_blocking_read(port, dummy, sizeof(dummy), timeout);
+  sp_blocking_write(port, "UID\n", 4, timeout); // get UID
+  sp_blocking_read(port, &uid, UID_LENGTH, timeout);
+  
   return uid;
 }
 

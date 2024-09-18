@@ -10,7 +10,7 @@
 #define VOLTAGE_SLOPE     6200
 #define MIN_TIMEOUT       60
 // If running without a battery you must set the alarm voltage to 0
-#define VOLTAGE_LOW_ALARM 3000 
+#define VOLTAGE_LOW_ALARM 3300 
 
 static uint16_t voltage = 0;
 static PowerMode power_mode = SNOOZE;
@@ -66,10 +66,12 @@ void power_management() {
       break;
     case SLEEP:
       fs_stop();
-      bmp_reset();
+      bmp_reset();  
+      HAL_DBGMCU_DisableDBGStandbyMode();
       HAL_PWR_DisableWakeUpPin(PWR_WAKEUP_PIN1);
       __HAL_PWR_CLEAR_FLAG(PWR_FLAG_WU);
       HAL_PWR_EnableWakeUpPin(PWR_WAKEUP_PIN1);
+      __HAL_PWR_CLEAR_FLAG(PWR_FLAG_WU);
       HAL_PWR_EnterSTANDBYMode();
       break;
     case SHUTDOWN:
@@ -89,3 +91,4 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 uint16_t power_get_battery_voltage(void) {
   return voltage;
 }
+

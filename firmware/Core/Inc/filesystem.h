@@ -7,7 +7,6 @@
 
 #define LABEL_RECORD_END  'r'
 
-
 typedef enum {
   FS_STOPPED = 0,
   FS_CLEAN,
