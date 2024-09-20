@@ -21,11 +21,19 @@ static int altimeter_get_block(uint8_t *buffer, uint32_t start_address, uint8_t 
 
 char *altimeter_connect(const char * const port_name) {
   char dummy[1000];
+  
   if (sp_get_port_by_name(port_name, &port) != SP_OK) {
+    printf("[error] unable to find %s\n", port_name);
     return (NULL);
   }
 
   if (sp_open(port, SP_MODE_READ_WRITE) != SP_OK) {
+    printf("[error] unable to open %s\n", port_name);
+    return (NULL);
+  }
+
+  if (strcmp(sp_get_port_usb_product(port),  "STM32 Virtual ComPort") != 0) {
+    printf("[error] %s is not an STM32 VCP\n", port_name);
     return (NULL);
   }
 
@@ -37,7 +45,7 @@ char *altimeter_connect(const char * const port_name) {
   
   sp_blocking_write(port, "\n", 1, timeout);    // flush altimeter output buffer
   sp_blocking_write(port, "i\n", 2, timeout);   // turn off interactive mode
-  sp_blocking_read(port, dummy, sizeof(dummy), timeout);
+  sp_blocking_read(port, dummy, sizeof(dummy), timeout); // flush the os rx buffer
   sp_blocking_write(port, "UID\n", 4, timeout); // get UID
   sp_blocking_read(port, &uid, UID_LENGTH, timeout);
   
@@ -99,8 +107,9 @@ int altimeter_get_recording_length(const uint32_t recording) {
   return (addresses[recording + 1] - addresses[recording]) / RECORD_LENGTH;
 }
 
-int altimeter_get_data(uint8_t *buffer, const uint32_t start_address, const uint32_t end_address) {
+int altimeter_get_data(uint8_t *buffer, const uint32_t start_address, const uint32_t len) {
   uint32_t address = start_address;
+  uint32_t end_address = start_address + len;
   uint32_t bytes_to_get = 0;
   uint32_t buffer_address = 0;
   while (address < end_address) {

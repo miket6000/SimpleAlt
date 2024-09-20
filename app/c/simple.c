@@ -75,12 +75,12 @@ void sync_altimeter(char *uid, uint8_t *altimeter_raw_data) {
 
   if (!read_altimeter_from_file(uid, altimeter_raw_data)) {
     printf("Local save file not found, downloading...\n");
-    altimeter_get_data(altimeter_raw_data, 0, ALTIMETER_FLASH_SIZE-1);
+    altimeter_get_data(altimeter_raw_data, 0, ALTIMETER_FLASH_SIZE);
     filename = write_altimeter_to_file(uid, altimeter_raw_data);
     printf("Saved data as %s.\n", filename);
   } else {
     printf("Local save file found for altimeter %s, comparing to altimeter data...\n", uid);
-    altimeter_get_data(altimeter_index, 0, ALTIMETER_INDEX_SIZE-1);
+    altimeter_get_data(altimeter_index, 0, ALTIMETER_INDEX_SIZE);
     difference = diff(altimeter_index, altimeter_raw_data, ALTIMETER_INDEX_SIZE);
 
     if (difference < ALTIMETER_INDEX_SIZE) {
@@ -88,7 +88,7 @@ void sync_altimeter(char *uid, uint8_t *altimeter_raw_data) {
       printf("(%.2x != %.2x @ %.8x)\n", altimeter_index[difference], altimeter_raw_data[difference], difference);
       // we've already downloaded the index, just copy it across, then grab the rest
       memcpy(altimeter_raw_data, altimeter_index, ALTIMETER_INDEX_SIZE);
-      altimeter_get_data(&altimeter_raw_data[ALTIMETER_INDEX_SIZE], ALTIMETER_INDEX_SIZE, ALTIMETER_FLASH_SIZE-1);
+      altimeter_get_data(&altimeter_raw_data[ALTIMETER_INDEX_SIZE], ALTIMETER_INDEX_SIZE, ALTIMETER_FLASH_SIZE-ALTIMETER_INDEX_SIZE);
       filename = write_altimeter_to_file(uid, altimeter_raw_data);
     } else {
       printf("No difference found, local save file is up to date.\n");
@@ -158,18 +158,21 @@ int main(int argc, char **argv) {
   } else {
     printf("Could not connect to altimeter, enter a UID to load from file, or press return to exit.\n> ");
     fgets(uid_entry, 9, stdin);
-    if (strlen(uid_entry) == 8) {
-      uid = uid_entry;
-      if (!read_altimeter_from_file(uid, altimeter_raw_data)) {
-        printf("%s.dump was not found.\n", uid);
+    switch (strlen(uid_entry)) {
+      case 8:
+        uid = uid_entry;
+        if (!read_altimeter_from_file(uid, altimeter_raw_data)) {
+          printf("%s.dump was not found.\n", uid);
+          return 0;
+        }
+        break;
+      case 0:
         return 0;
-      }
-    } else {
-      printf("Invalid input: %s (%ld)\n", uid_entry, strlen(uid_entry));
-      return 0;
+      default:
+        printf("Invalid input: %s (%ld)\n", uid_entry, strlen(uid_entry));
+        return 0;
     }
   } 
-
 
   parse_recordings(altimeter_raw_data);
   print_recordings();

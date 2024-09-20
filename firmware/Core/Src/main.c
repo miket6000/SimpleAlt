@@ -268,7 +268,8 @@ int main(void)
 
   bmp_init(BMP_CS_GPIO_Port, BMP_CS_Pin);
   fs_init(&hspi1, FLASH_CS_GPIO_Port, FLASH_CS_Pin);
-  uid = fs_get_uid();
+  //uid = fs_get_uid();
+  uid = HAL_GetUIDw0() ^ HAL_GetUIDw1() ^ HAL_GetUIDw2();
   
   fs_read_config('p', &sample_rate_pressure);
   fs_read_config('t', &sample_rate_temperature);

@@ -43,3 +43,6 @@ fp-info-cache
 
 # Intermediate firmware files 
 firmware/build/*
+
+# SimpleAlt output files
+*.dump

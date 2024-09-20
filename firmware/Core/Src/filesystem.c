@@ -55,10 +55,6 @@ FSResult fs_flush() {
   return FS_OK;
 }
 
-uint32_t fs_get_uid() {
-  return w25qxx_read_uid(&w25qxx);
-}
-
 FSResult fs_save(char label, void *data, uint16_t len) {
   if (next_free_address + len + 1 >= RECORDING_END_ADDRESS) {
     return FS_ERR;
