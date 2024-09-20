@@ -137,6 +137,9 @@ AS_DEFS =
 C_DEFS =  \
 -DUSE_HAL_DRIVER \
 -DSTM32F042x6
+ifdef DISABLE_SLEEP
+C_DEFS += -DDISABLE_SLEEP
+endif
 
 
 # AS includes

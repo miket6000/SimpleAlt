@@ -9,8 +9,12 @@
 #define NUM_ADC_BITS      12
 #define VOLTAGE_SLOPE     6200
 #define MIN_TIMEOUT       60
-// If running without a battery you must set the alarm voltage to 0
+
+#ifdef DISABLE_SLEEP
+#define VOLTAGE_LOW_ALARM 0 
+#else
 #define VOLTAGE_LOW_ALARM 3300 
+#endif //DISABLE_SLEEP
 
 static uint16_t voltage = 0;
 static PowerMode power_mode = SNOOZE;
