@@ -22,11 +22,11 @@ bool interactive = false;
 
 void (*print_function)(char *str, uint16_t len);
 
-void cmd_set_interactive(void) {
+void cmd_set_interactive(void *parameter) {
   interactive = true;
 }
 
-void cmd_unset_interactive(void) {
+void cmd_unset_interactive(void *parameter) {
   interactive = false;
 }
 
@@ -53,10 +53,11 @@ void cmd_clear_buffer() {
   cmd_print(prompt, sizeof(prompt));
 }
 
-void cmd_add(const char *command, void (*callback)(void)) {
+void cmd_add(const char *command, void (*callback)(void *), void *parameter) {
   if (num_commands < MAX_NUM_COMMANDS) {
     strncpy(commands[num_commands].command, command, COMMAND_LEN);
     commands[num_commands].callback = callback;
+    commands[num_commands].parameter = parameter;
     num_commands++;
   } else {
     // silently fail to add the command...
@@ -76,7 +77,7 @@ void cmd_read_input(char *buffer, uint8_t len) {
       matched = false;
       for (int cmd = 0; cmd < num_commands; cmd++) {
         if (strncmp(token, commands[cmd].command, RX_BUFFER_LEN) == 0) {
-          (*commands[cmd].callback)();
+          (*commands[cmd].callback)(commands[cmd].parameter);
           cmd_clear_buffer();
           buffer_index = 0;
           matched = true;

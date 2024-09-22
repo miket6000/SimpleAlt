@@ -63,11 +63,23 @@
 extern USBD_HandleTypeDef hUsbDeviceFS;
 extern uint8_t UserRxBufferFS[APP_RX_DATA_SIZE];
 extern uint8_t UserTxBufferFS[APP_TX_DATA_SIZE];
+
+typedef struct {
+  uint32_t altitude_sample_rate;
+  uint32_t temperature_sample_rate;
+  uint32_t pressure_sample_rate;
+  uint32_t voltage_sample_rate;
+  uint32_t status_sample_rate;
+  uint32_t power_off_timeout;
+} AltimeterConfig;
+
 uint8_t rx_buffer[APP_RX_DATA_SIZE];
 uint16_t tx_buffer_index = 0;
 uint16_t rx_buffer_index = 0;
 uint32_t uid = 0;
 uint8_t usb_connect = 1;
+
+AltimeterConfig config = {20, 100, 0, 100, 0, SECONDS_TO_TICKS(1200)};
 
 const int8_t idle_sequence[] = {1, PAUSE, -2};
 const int8_t usb_sequence[] = {0, -1};
@@ -98,32 +110,44 @@ void print(char *tx_buffer, uint16_t len) {
   }
 }
 
-void print_pressure() {
+void print_uint32(void *parameter) {
   char buffer[8];
-  itoa(bmp_get_pressure(), buffer, 10);
+  itoa(*(uint32_t *)parameter, buffer, 10);
   print(buffer, strlen(buffer));
 }
 
-void print_altitude() {
+void print_int32(void *parameter) {
   char buffer[8];
-  itoa(bmp_get_altitude(), buffer, 10);
+  itoa(*(int32_t *)parameter, buffer, 10);
   print(buffer, strlen(buffer));
 }
 
-void print_temperature() {
+void print_uint16(void *parameter) {
   char buffer[8];
-  itoa(bmp_get_temperature(), buffer, 10);
+  itoa(*(uint16_t *)parameter, buffer, 10);
   print(buffer, strlen(buffer));
 }
 
-void print_voltage() {
+void print_int16(void *parameter) {
   char buffer[8];
-  itoa(power_get_battery_voltage(), buffer, 10);
+  itoa(*(int16_t *)parameter, buffer, 10);
+  print(buffer, strlen(buffer));
+}
+
+void print_uint8(void *parameter) {
+  char buffer[8];
+  itoa(*(uint8_t *)parameter, buffer, 10);
+  print(buffer, strlen(buffer));
+}
+
+void print_int8(void *parameter) {
+  char buffer[8];
+  itoa(*(int8_t *)parameter, buffer, 10);
   print(buffer, strlen(buffer));
 }
 
 // W address bytes
-void write_flash() {
+void write_flash(void *parameter) {
   char* param;
   uint32_t address = 0;
   uint8_t len = 0;
@@ -147,7 +171,7 @@ void write_flash() {
 }
 
 // R address bytes
-void read_flash() {
+void read_flash(void *parameter) {
   uint32_t address;
   uint8_t len;
   uint8_t flash_buffer[64];
@@ -169,7 +193,7 @@ void read_flash() {
 }
 
 // r address bytes
-void read_flash_binary() {
+void read_flash_binary(void *parameter) {
   uint32_t address;
   uint8_t len;
   uint8_t flash_buffer[64];
@@ -183,19 +207,28 @@ void read_flash_binary() {
   }
 }
 
-void erase_flash() {
+void erase_flash(void *parameter) {
+  AltimeterConfig *config = (AltimeterConfig *)parameter;
+  // delete everything
   fs_erase();
+  // restore current config so it can be loaded on power up
+  fs_save_config('p', &config->pressure_sample_rate);
+  fs_save_config('t', &config->temperature_sample_rate);
+  fs_save_config('a', &config->altitude_sample_rate);
+  fs_save_config('v', &config->voltage_sample_rate);
+  fs_save_config('s', &config->status_sample_rate);
+  fs_save_config('o', &config->power_off_timeout);
   print("OK", 2);
 }
 
-void set_config() {
+void set_config(void *parameter) {
   char *label = cmd_get_param();
   uint32_t value = atoi(cmd_get_param());
   fs_save_config(label[0], &value);
   print("OK", 2); 
 }
 
-void get_config() {
+void get_config(void *parameter) {
   char *label = cmd_get_param();
   uint32_t value = 0xFFFFFFFF;
   fs_read_config(label[0], &value);
@@ -203,7 +236,7 @@ void get_config() {
   print(itoa(value, str_buf, 10), strlen(str_buf));
 }
 
-void get_uid() {
+void get_uid(void *parameter) {
   char str_buf[10] = {0};
   print(itoa(uid, str_buf, 16), strlen(str_buf));
 }
@@ -224,20 +257,11 @@ int main(void)
   int32_t altitude_above_ground = 0;
   uint32_t max_altitude = 0;
 
-  uint32_t timeout = SECONDS_TO_TICKS(1200);
-
   int32_t altitude = 0;
   int16_t temperature = 0;
   uint32_t pressure = 101325;
   uint16_t voltage = 0;
   uint8_t status = 0;
-
-  // sample rate variables initiated with default values
-  uint32_t sample_rate_altitude = SECONDS_TO_TICKS(0.05);
-  uint32_t sample_rate_temperature = SECONDS_TO_TICKS(1);
-  uint32_t sample_rate_pressure = 0;
-  uint32_t sample_rate_voltage = SECONDS_TO_TICKS(1);
-  uint32_t sample_rate_status = 0;
 
   /* USER CODE END 1 */
 
@@ -271,15 +295,15 @@ int main(void)
   //uid = fs_get_uid();
   uid = HAL_GetUIDw0() ^ HAL_GetUIDw1() ^ HAL_GetUIDw2();
   
-  fs_read_config('p', &sample_rate_pressure);
-  fs_read_config('t', &sample_rate_temperature);
-  fs_read_config('a', &sample_rate_altitude);
-  fs_read_config('v', &sample_rate_voltage);
-  fs_read_config('s', &sample_rate_status);
+  fs_read_config('p', &config.pressure_sample_rate);
+  fs_read_config('t', &config.temperature_sample_rate);
+  fs_read_config('a', &config.altitude_sample_rate);
+  fs_read_config('v', &config.voltage_sample_rate);
+  fs_read_config('s', &config.status_sample_rate);
+  fs_read_config('o', &config.power_off_timeout);
   fs_read_config('m', &max_altitude);
-  fs_read_config('o', &timeout);
 
-  power_set_timeout(SECONDS_TO_TICKS(timeout));
+  power_set_timeout(SECONDS_TO_TICKS(config.power_off_timeout));
 
   if (max_altitude > 0) {
     led_add_number_sequence(max_altitude);
@@ -290,18 +314,18 @@ int main(void)
   // Calibrate The ADC On Power-Up For Better Accuracy
   HAL_ADCEx_Calibration_Start(&hadc);
   
-  cmd_add("P", print_pressure); 
-  cmd_add("T", print_temperature); 
-  cmd_add("A", print_altitude); 
-  cmd_add("V", print_voltage);
-  cmd_add("ERASE", erase_flash);
-  cmd_add("I", cmd_set_interactive);
-  cmd_add("i", cmd_unset_interactive);
-  cmd_add("R", read_flash);
-  cmd_add("r", read_flash_binary);
-  cmd_add("SET", set_config);
-  cmd_add("GET", get_config);
-  cmd_add("UID", get_uid);
+  cmd_add("P", print_uint32, &pressure); 
+  cmd_add("T", print_int16, &temperature); 
+  cmd_add("A", print_int32, &altitude); 
+  cmd_add("V", print_uint16, &voltage);
+  cmd_add("ERASE", erase_flash, &config);
+  cmd_add("I", cmd_set_interactive, NULL);
+  cmd_add("i", cmd_unset_interactive, NULL);
+  cmd_add("R", read_flash, NULL);
+  cmd_add("r", read_flash_binary, NULL);
+  cmd_add("SET", set_config, NULL);
+  cmd_add("GET", get_config, NULL);
+  cmd_add("UID", print_uint32, &uid);
   cmd_set_print_function(print);
 
   //1 second delay to give the user time to release the power on button. 
@@ -376,7 +400,7 @@ int main(void)
               if (ALTITUDE_IN_METERS(max_altitude) > 1) {
                 uint32_t altitude_in_meters = ALTITUDE_IN_METERS(max_altitude);
                 led_add_number_sequence(altitude_in_meters);
-                fs_save_config('M', &altitude_in_meters);
+                fs_save_config('m', &altitude_in_meters);
               } else {
                 led_add_sequence(idle_sequence);
               }
@@ -409,23 +433,23 @@ int main(void)
           last_state = state;
 
           // save the data
-          if (sample_rate_altitude != 0 && tick % sample_rate_altitude == 0) {
+          if (config.altitude_sample_rate != 0 && tick % config.altitude_sample_rate == 0) {
             fs_save('A', &altitude,     sizeof(altitude));
           }
           
-          if (sample_rate_pressure != 0 && tick % sample_rate_pressure == 0) {
+          if (config.pressure_sample_rate != 0 && tick % config.pressure_sample_rate == 0) {
             fs_save('P', &pressure,     sizeof(pressure));
           }
 
-          if (sample_rate_temperature != 0 && tick % sample_rate_temperature == 0) {
+          if (config.temperature_sample_rate != 0 && tick % config.temperature_sample_rate == 0) {
             fs_save('T', &temperature,  sizeof(temperature));
           }
           
-          if (sample_rate_voltage != 0 && tick % sample_rate_voltage == 0) {
+          if (config.voltage_sample_rate != 0 && tick % config.voltage_sample_rate == 0) {
             fs_save('V', &voltage,      sizeof(voltage));
           }
           
-          if (sample_rate_status != 0 && tick % sample_rate_status == 0) {
+          if (config.status_sample_rate != 0 && tick % config.status_sample_rate == 0) {
             fs_save('S', &status,       sizeof(status));
           }
 

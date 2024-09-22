@@ -15,7 +15,7 @@ typedef struct {
   uint32_t temperature_sr;
 } LogState;
 
-char *altimeter_connect(const char * const port_name);
+uint32_t altimeter_connect(const char * const port_name);
 int altimeter_get_addresses();
 int altimeter_get_recording_count();
 int altimeter_get_recording_length(const unsigned int recording);

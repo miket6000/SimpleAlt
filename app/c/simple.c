@@ -42,9 +42,9 @@ uint32_t diff(uint8_t * const data1, uint8_t * const data2, uint32_t length) {
   return length;
 }
 
-bool read_altimeter_from_file(char *uid, uint8_t *altimeter_raw_data) {
+bool read_altimeter_from_file(uint32_t uid, uint8_t *altimeter_raw_data) {
   char filename[64];
-  sprintf(filename, "%s.dump", uid); 
+  sprintf(filename, "%.8x.dump", uid); 
   bool file_exist = (access(filename, F_OK) == 0);
 
   if (file_exist) {
@@ -57,9 +57,9 @@ bool read_altimeter_from_file(char *uid, uint8_t *altimeter_raw_data) {
   return file_exist;
 }
 
-char *write_altimeter_to_file(char *uid, uint8_t *altimeter_raw_data) {
+char *write_altimeter_to_file(uint32_t uid, uint8_t *altimeter_raw_data) {
   static char filename[64];
-  sprintf(filename, "%s.dump", uid); 
+  sprintf(filename, "%.8x.dump", uid); 
   FILE *fpt = NULL;
   fpt = fopen(filename, "wb+");
   fwrite(altimeter_raw_data, sizeof(uint8_t), ALTIMETER_FLASH_SIZE, fpt);  
@@ -68,7 +68,7 @@ char *write_altimeter_to_file(char *uid, uint8_t *altimeter_raw_data) {
 }
 
 /* update local file and buffers to match altimeter */
-void sync_altimeter(char *uid, uint8_t *altimeter_raw_data) {
+void sync_altimeter(uint32_t uid, uint8_t *altimeter_raw_data) {
   char *filename;
   uint8_t altimeter_index[ALTIMETER_INDEX_SIZE];
   uint32_t difference = 0;
@@ -79,7 +79,7 @@ void sync_altimeter(char *uid, uint8_t *altimeter_raw_data) {
     filename = write_altimeter_to_file(uid, altimeter_raw_data);
     printf("Saved data as %s.\n", filename);
   } else {
-    printf("Local save file found for altimeter %s, comparing to altimeter data...\n", uid);
+    printf("Local save file found for altimeter %.8x, comparing to altimeter data...\n", uid);
     altimeter_get_data(altimeter_index, 0, ALTIMETER_INDEX_SIZE);
     difference = diff(altimeter_index, altimeter_raw_data, ALTIMETER_INDEX_SIZE);
 
@@ -149,27 +149,27 @@ int main(int argc, char **argv) {
   }
   
   char *port_name = argv[1];
-  char *uid = altimeter_connect(port_name);
-  char uid_entry[16];
+  uint32_t uid = altimeter_connect(port_name);
+  char uid_str[16];
 
-  if (uid != NULL) {
-    printf("Successfully connected to altimeter (UID = %s).\n", uid);
+  if (uid != 0) {
+    printf("Successfully connected to altimeter (UID = %.8x).\n", uid);
     sync_altimeter(uid, altimeter_raw_data);
   } else {
     printf("Could not connect to altimeter, enter a UID to load from file, or press return to exit.\n> ");
-    fgets(uid_entry, 9, stdin);
-    switch (strlen(uid_entry)) {
+    fgets(uid_str, 9, stdin);
+    switch (strlen(uid_str)) {
       case 8:
-        uid = uid_entry;
+        uid = atoi(uid_str);
         if (!read_altimeter_from_file(uid, altimeter_raw_data)) {
-          printf("%s.dump was not found.\n", uid);
+          printf("%.8x.dump was not found.\n", uid);
           return 0;
         }
         break;
       case 0:
         return 0;
       default:
-        printf("Invalid input: %s (%ld)\n", uid_entry, strlen(uid_entry));
+        printf("Invalid input: %s\n", uid_str);
         return 0;
     }
   } 
@@ -194,7 +194,7 @@ int main(int argc, char **argv) {
   // save the selected file.
   char base_filename[64];
   char filename[64];
-  sprintf(base_filename, "SimpleAlt_%s_%i", uid, selected_id);
+  sprintf(base_filename, "SimpleAlt_%.8x_%i", uid, selected_id);
   if (get_filename(filename, base_filename, "csv")) {
     write_csv(filename, p_recording);
   } else {

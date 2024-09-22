@@ -4,16 +4,17 @@
 
 #define COMMAND_LEN 8U
 
-void cmd_set_interactive(void);
-void cmd_unset_interactive(void);
+void cmd_set_interactive(void *parameter);
+void cmd_unset_interactive(void *parameter);
 void cmd_set_print_function(void(*function)(char *, uint16_t));
-void cmd_add(const char *command, void (*callback)(void));
+void cmd_add(const char *command, void (*callback)(void *), void *parameter);
 void cmd_read_input(char *buffer, uint8_t len);
 char *cmd_get_param(void);
 
 typedef struct {
   char command[COMMAND_LEN];
-  void (*callback)(void);
+  void (*callback)(void *);
+  void *parameter;
 } Command;
 
 #endif //COMMAND_H
