@@ -17,7 +17,7 @@ static SettingType settings[] = {
   {"Temperature Sample Rate", 't',  100,      read_uint32},
   {"Voltage Sample Rate",     'v',  100,      read_uint32},
   {"State Sample Rate",       's',  0,        read_uint32},
-  {"Maxumum Altitude",        'm',  0,        read_uint32},
+  {"Maximum Altitude",        'm',  0,        read_uint32},
   {"Power Off Timeout",       'o',  12000,    read_uint32},
   {"Recording End Address",   'r',  0xffff,   read_uint32},
 };

@@ -27,7 +27,7 @@ typedef struct {
   RecordingRow *current_row;
 } Recording;
 
-typedef struct SettingType {
+typedef struct {
   char title[24];
   char label;
   uint32_t value;
