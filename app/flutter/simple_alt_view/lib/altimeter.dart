@@ -1,12 +1,14 @@
-import 'dart:developer';
 import 'dart:typed_data';
 import 'package:flutter_libserialport/flutter_libserialport.dart';
-import 'package:simple_alt_view/recording.dart';
+import 'recording.dart';
 
 class Altimeter {
-  static const firstAdress = 0x10000;
+  static const indexSize = 0x10000;
+  static const altimeterFlashSize = 0x200000;
+  static const altimeterBufferSize = 64;
+  List<Recording> recordingList = [];
   SerialPort? port;
-  List<Recording> recordings = []; 
+  int uid = 0;
 
   bool findAltimeter() {
     for (final address in SerialPort.availablePorts) {
@@ -29,82 +31,59 @@ class Altimeter {
   Altimeter() {
     if (findAltimeter()) {
       SerialPort sp = openPort(); 
-      final command = Uint8List.fromList("i\n".codeUnits);
-      sp.write(command, timeout: 1000);
+      final disableInteractive = Uint8List.fromList("i\n".codeUnits);
+      final getUID = Uint8List.fromList("UID\n".codeUnits);
+      
+      sp.write(disableInteractive, timeout: 1000);
+      sp.read(1000, timeout: 1000); // clear the read buffer
+      sp.write(getUID, timeout: 1000);
+      uid = int.parse(String.fromCharCodes(sp.read(8, timeout: 1000)));
       sp.close();
     }
   }
 
-  Recording fetchRecording(int index) {
-    Uint8List command = Uint8List(16);
-    var response = Uint8List(61);
-    double altitude;
-    double time = 0;
-    const double sampleTime = 0.02;
-    
-    if (findAltimeter()) {
-      if (index < recordings.length) {
-        if (!recordings[index].hasData()) {
-          //download the data
-          SerialPort sp = openPort(); 
-          int address = recordings[index].startAddress;
-          while(address < recordings[index].endAddress) {
-            command = Uint8List.fromList("r $address 60\n".codeUnits);
-            sp.write(command, timeout: 1000);
-            response = sp.read(60, timeout: 4000);
-            for(int i = 0; i < 60; i+=5) {
-              time += sampleTime;
-              if (address + i < recordings[index].endAddress) {
-                altitude = response.buffer.asByteData().getInt32(i + 1, Endian.little) / 100.0; 
-                if (address + i == recordings[index].startAddress) {
-                  recordings[index].groundLevel = altitude;
-                }
-                recordings[index].data.add(Sample(time: time, altitude: altitude));          
-              }
-            }
-            address += 60;
-          } 
-          sp.close();
-        }
-      }
-      return recordings[index];
-    } else {
-      return Recording(index: 0, startAddress: 0, endAddress: 0);
+  void altimeterGetBlock(List<int> buffer, int startAddress, int len) {
+    if (len <= altimeterBufferSize) {
+      final readCommand = Uint8List.fromList("r $startAddress $len\n".codeUnits);
+      SerialPort sp = openPort();
+      sp.write(readCommand, timeout: 1000);
+      buffer.addAll(sp.read(len, timeout: 1000));
     }
   }
 
+  void altimeterGetData(List<int> buffer, int startAddress, int len) {
+    int address = startAddress;
+    int endAddress = startAddress + len;
+    int bytesToGet = 0;
 
-  
-  // retrieves a list of all the recordings on the altimeter and creates a Recording instance for each one.
-  // Note, this function does not populate the data in the Recording instance as this takes a long time, so
-  // is expected to be done on demand by calling fetchRecording()
-  List<Recording> getRecordingList() {
-    var command = Uint8List.fromList("r 0 4\n".codeUnits);
-    var response = Uint8List(4);
-    var startAddress = 0x10000;
-    var endAddress = 0x10000;
-    var count = 0;
-    
-    SerialPort sp = openPort();
-    recordings = [];
-    while (endAddress != 0xFFFFFFFF && count < 255) {
-      command = Uint8List.fromList("r ${count*4} 4\n".codeUnits);
-      sp.write(command, timeout: 1000);
-      response = sp.read(4, timeout: 1000);
-      if (response.length == 4) {
-        endAddress = response.buffer.asByteData().getUint32(0, Endian.little);
-        if (endAddress != 0xFFFFFFFF) {
-          recordings.add(Recording(index: count, startAddress: startAddress, endAddress: endAddress));
-          startAddress = endAddress;
-        }     
-      } else {
-        log("There was an error attempting to read address ${count * 4}");
+    while(address < endAddress) {
+      bytesToGet = endAddress - address;
+      if (bytesToGet > altimeterBufferSize) {
+        bytesToGet = altimeterBufferSize;
       }
-
-      count++;
+      altimeterGetBlock(buffer, startAddress, len);
+      address += bytesToGet;
     }
-    sp.close();
+  }
+
+  void parseAltimeterData(List<int> buffer) {
+    int recordStartAddress = 0x10000;
     
-    return recordings;
+    final altimeterIndex = buffer.sublist(0, Altimeter.indexSize-1);
+    for (var settingIndex = 0; settingIndex < altimeterIndex.length; settingIndex += 5) {
+      var label = String.fromCharCode(altimeterIndex[settingIndex]);
+      if (label == String.fromCharCode(0xff)) {
+        break;
+      }
+      var value = swapBytes(buffer.sublist(settingIndex+1, 4));
+
+      settings[label]!.value = value;
+    
+      if (label == "r") {
+        var length = recordStartAddress - value;
+        recordingList.add(Recording(buffer.sublist(recordStartAddress, length)));
+        recordStartAddress = value;
+      }
+    }
   }
 }
