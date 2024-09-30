@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:simple_alt_view/altimeter.dart';
@@ -14,39 +16,56 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   //final GlobalKey<_AltitudeChartState> _key = GlobalKey();
   final altimeter = Altimeter();
-  List<Recording> recordingList = [];
   List<String> recordingStrings = [];
-  late Recording selectedRecording;
-  late List<FlSpot> points;
+  Recording? selectedRecording;
+  List<List<FlSpot>> points = [];
   bool loading = false;
 
   @override
   void initState() {
     super.initState();
-    points = <FlSpot>[];
-    refreshLogList();
   }
 
   void refreshLogList() {
-    if (altimeter.findAltimeter()) {
-      recordingList = altimeter.getRecordingList();
-      selectedRecording = recordingList.first;
+    if(altimeter.findAltimeter()) {
+      altimeter.sync();
     } else {
-      selectedRecording = Recording(index: 0, startAddress: 0, endAddress: 0);
+      altimeter.sync(filename:"621e7440.dump");
+    }
+
+    altimeter.recordingList.clear();
+    selectedRecording = null;
+    altimeter.parseData();
+    
+    if (altimeter.recordingList.isNotEmpty) {
+      selectedRecording = altimeter.recordingList[0];
     }
     setState(() { /* required to force update of dropdownMenu*/ });
   }
 
-void onSave() {
+  void onSave() {
     final scaffold = ScaffoldMessenger.of(context);
 
-    String filename = selectedRecording.saveAsCSV();
+    if (selectedRecording != null) {
+      var now = DateTime.now();
+      var month = now.month.toString().padLeft(2, '0');
+      var day = now.day.toString().padLeft(2, '0');
+      var hour = now.hour.toString().padLeft(2, '0');
+      var minute = now.minute.toString().padLeft(2, '0');
+      var second = now.second.toString().padLeft(2, '0');
+      var datetime = "${now.year}$month${day}_$hour$minute$second"; 
+      
+      String filename = "SimpleAlt-${altimeter.uid.toRadixString(16)}-${altimeter.recordingList.indexOf(selectedRecording!)}-$datetime.csv";
+      String csv = selectedRecording!.getCSV();
+      File file = File(filename);
+      file.writeAsStringSync(csv);
 
-    scaffold.showSnackBar(
-      SnackBar(
-        content: Text('File saved as $filename'),
-      ),
-    );
+      scaffold.showSnackBar(
+        SnackBar(
+          content: Text('File saved as $filename'),
+        ),
+      );
+    }
   }
 
   @override
@@ -54,15 +73,14 @@ void onSave() {
     DropdownMenu recordingDropdown = DropdownMenu<Recording>(
       initialSelection: selectedRecording,
       width: 400, 
-      onSelected: (Recording? value) {
+      onSelected: (Recording? recording) {
         // user selected a recording...
-        selectedRecording = value!;
-        altimeter.fetchRecording(value.index); // get data for selected recording
-        points = value.altitude.map((sample) => FlSpot(sample.time, sample.altitude)).toList(); //update graph data
+        selectedRecording = recording!;
+        altimeter.recordingList[recording.index]; // get data for selected recording
         setState(() {});
       },
-      dropdownMenuEntries: recordingList.map<DropdownMenuEntry<Recording>>((Recording value) {
-        return DropdownMenuEntry<Recording>(value: value, label: 'Recording ${value.index}, duration ${value.getDuration().toStringAsFixed(1)}s');
+      dropdownMenuEntries: altimeter.recordingList.map<DropdownMenuEntry<Recording>>((Recording recording) {
+        return DropdownMenuEntry<Recording>(value: recording, label: 'Recording ${altimeter.recordingList.indexOf(recording)}, duration ${recording.getDuration().toStringAsFixed(1)}s');
       }).toList(),
     );
 
@@ -85,7 +103,7 @@ void onSave() {
           Expanded(
             child: Padding (
               padding: const EdgeInsets.all(20),
-              child: AltitudeChart(points: points),
+              child: AltitudeChart(recording: selectedRecording),
             )
           ),
 
