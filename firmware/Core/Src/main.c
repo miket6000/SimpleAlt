@@ -50,6 +50,13 @@
 #define STATE_IDLE 0
 #define STATE_RECORDING 1
 
+#define DEFAULT_ALTITUDE_SR       SECONDS_TO_TICKS(0.05)
+#define DEFAULT_TEMPERATURE_SR    SECONDS_TO_TICKS(1)
+#define DEFAULT_PRESSURE_SR       0
+#define DEFAULT_VOLTAGE_SR        SECONDS_TO_TICKS(1)
+#define DEFAULT_STATUS_SR         0
+#define DEFAULT_POWER_OFF_TIMEOUT SECONDS_TO_TICKS(1200)
+ 
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -64,6 +71,12 @@ extern USBD_HandleTypeDef hUsbDeviceFS;
 extern uint8_t UserRxBufferFS[APP_RX_DATA_SIZE];
 extern uint8_t UserTxBufferFS[APP_TX_DATA_SIZE];
 
+uint8_t rx_buffer[APP_RX_DATA_SIZE];
+uint16_t tx_buffer_index = 0;
+uint16_t rx_buffer_index = 0;
+uint32_t uid = 0;
+uint8_t usb_connect = 1;
+
 typedef struct {
   uint32_t altitude_sample_rate;
   uint32_t temperature_sample_rate;
@@ -73,13 +86,15 @@ typedef struct {
   uint32_t power_off_timeout;
 } AltimeterConfig;
 
-uint8_t rx_buffer[APP_RX_DATA_SIZE];
-uint16_t tx_buffer_index = 0;
-uint16_t rx_buffer_index = 0;
-uint32_t uid = 0;
-uint8_t usb_connect = 1;
 
-AltimeterConfig config = {20, 100, 0, 100, 0, SECONDS_TO_TICKS(1200)};
+AltimeterConfig config = {
+  DEFAULT_ALTITUDE_SR,
+  DEFAULT_TEMPERATURE_SR, 
+  DEFAULT_PRESSURE_SR,
+  DEFAULT_VOLTAGE_SR,
+  DEFAULT_STATUS_SR,
+  DEFAULT_POWER_OFF_TIMEOUT
+};
 
 const int8_t idle_sequence[] = {1, PAUSE, -2};
 const int8_t usb_sequence[] = {0, -1};
@@ -221,6 +236,28 @@ void erase_flash(void *parameter) {
   print("OK", 2);
 }
 
+void factory_reset(void *parameter) {
+  AltimeterConfig *config = (AltimeterConfig *)parameter;
+  
+  config->altitude_sample_rate    = DEFAULT_ALTITUDE_SR;
+  config->pressure_sample_rate    = DEFAULT_PRESSURE_SR;
+  config->temperature_sample_rate = DEFAULT_TEMPERATURE_SR;
+  config->voltage_sample_rate     = DEFAULT_VOLTAGE_SR;
+  config->status_sample_rate      = DEFAULT_STATUS_SR;
+  config->power_off_timeout       = DEFAULT_POWER_OFF_TIMEOUT;
+  
+  fs_erase();
+  
+  fs_save_config('p', &config->pressure_sample_rate);
+  fs_save_config('t', &config->temperature_sample_rate);
+  fs_save_config('a', &config->altitude_sample_rate);
+  fs_save_config('v', &config->voltage_sample_rate);
+  fs_save_config('s', &config->status_sample_rate);
+  fs_save_config('o', &config->power_off_timeout);
+  print("OK", 2);
+}
+
+
 void set_config(void *parameter) {
   char *label = cmd_get_param();
   uint32_t value = atoi(cmd_get_param());
@@ -319,6 +356,7 @@ int main(void)
   cmd_add("A", print_int32, &altitude); 
   cmd_add("V", print_uint16, &voltage);
   cmd_add("ERASE", erase_flash, &config);
+  cmd_add("RESET", factory_reset, &config);
   cmd_add("I", cmd_set_interactive, NULL);
   cmd_add("i", cmd_unset_interactive, NULL);
   cmd_add("R", read_flash, NULL);
@@ -428,6 +466,12 @@ int main(void)
             led_add_sequence(recording_sequence);
             ground_altitude = altitude;
             max_altitude = 0;
+            fs_save('A', &altitude, sizeof(altitude));
+            fs_save('P', &pressure, sizeof(pressure));
+            fs_save('T', &temperature, sizeof(temperature));
+            fs_save('V', &voltage, sizeof(voltage));
+            fs_save('S', &status, sizeof(status));
+          
           }
 
           last_state = state;
@@ -468,6 +512,7 @@ int main(void)
 
     /* Deal with data recieved via USB */
     if (rx_buffer_index > 0) {
+      led(ON);
       //power_set_mode(AWAKE); //Dirty hack
       power_idle_reset(); //don't go to sleep if actively in use
       cmd_read_input((char *)rx_buffer, rx_buffer_index);
@@ -476,6 +521,7 @@ int main(void)
   
     /* Transmit any data in the output buffer */
     if (tx_buffer_index > 0) {
+      led(ON);
       if (CDC_Transmit_FS(UserTxBufferFS, tx_buffer_index) == USBD_OK) {
         tx_buffer_index = 0;
       }
