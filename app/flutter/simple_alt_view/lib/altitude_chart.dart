@@ -101,35 +101,38 @@ class _AltitudeChartState extends State<AltitudeChart> {
       children:[
         for (var pd in pointList) customYAxis(pd.axis),
         Expanded(
-          child: LineChart(
-            LineChartData(
-              //borderData: FlBorderData(border: const Border(bottom: BorderSide(), left: BorderSide())), 
-              lineBarsData: [
-                for (PointData pointData in pointList) 
-                  LineChartBarData(spots: pointData.spots, dotData: const FlDotData(show: false,), color:pointData.axis.colour),
-              ],
-              titlesData: const FlTitlesData(
-                topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)), 
-                //bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, interval: 20)),
-              ),
-              //maxX: (dataLength > 1 ? ((points[0].reduce((cur, next) => cur.x > next.x ? cur: next)).x / 10).ceil() * 10.0 : 0),
-              //minY: 0, //(dataLength > 1 ? ((points[0].reduce((cur, next) => cur.y < next.y ? cur: next)).y / 10).floor() * 10.0 : 0),
-              //maxY: 1.0, //(dataLength > 1 ? ((points[0].reduce((cur, next) => cur.y > next.y ? cur: next)).y / 10).ceil() * 10.0 : 0),
-              lineTouchData: LineTouchData(
-                touchTooltipData: LineTouchTooltipData(
-                  fitInsideHorizontally: true,
-                  fitInsideVertically: true,
-                  getTooltipItems: (touchedSpots) {
-                    return touchedSpots.map((LineBarSpot touchedSpot) {
-                      return LineTooltipItem(
-                        '${points[0][touchedSpot.spotIndex].y.toStringAsFixed(1)}m', const TextStyle(),
-                      );
-                    }).toList();
-                  },
-                )
-              )  
+          child: Padding(
+            padding: const EdgeInsets.only(left:20),
+              child: LineChart(
+                LineChartData (
+                //borderData: FlBorderData(border: const Border(bottom: BorderSide(), left: BorderSide())), 
+                lineBarsData: [
+                  for (PointData pointData in pointList) 
+                    LineChartBarData(spots: pointData.spots, dotData: const FlDotData(show: false,), color:pointData.axis.colour),
+                ],
+                titlesData: const FlTitlesData(
+                  topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)), 
+                  //bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, interval: 20)),
+                ),
+                //maxX: (dataLength > 1 ? ((points[0].reduce((cur, next) => cur.x > next.x ? cur: next)).x / 10).ceil() * 10.0 : 0),
+                //minY: 0, //(dataLength > 1 ? ((points[0].reduce((cur, next) => cur.y < next.y ? cur: next)).y / 10).floor() * 10.0 : 0),
+                //maxY: 1.0, //(dataLength > 1 ? ((points[0].reduce((cur, next) => cur.y > next.y ? cur: next)).y / 10).ceil() * 10.0 : 0),
+                lineTouchData: LineTouchData(
+                  touchTooltipData: LineTouchTooltipData(
+                    fitInsideHorizontally: true,
+                    fitInsideVertically: true,
+                    getTooltipItems: (touchedSpots) {
+                      return touchedSpots.map((LineBarSpot touchedSpot) {
+                        return LineTooltipItem(
+                          '${points[0][touchedSpot.spotIndex].y.toStringAsFixed(1)}m', const TextStyle(),
+                        );
+                      }).toList();
+                    },
+                  ),
+                ),
+              ), 
             ),
           ),
         ),

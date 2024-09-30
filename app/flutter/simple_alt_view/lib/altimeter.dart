@@ -4,6 +4,7 @@ import 'package:flutter_libserialport/flutter_libserialport.dart';
 import 'recording.dart';
 
 class Altimeter {
+  static Altimeter? _instance;
   static const indexSize = 0x10000;
   static const flashSize = 0x200000;
   static const altimeterInternalBufferSize = 64;
@@ -13,6 +14,11 @@ class Altimeter {
   
   SerialPort? port;
   int uid = 0;
+
+  factory Altimeter() {
+      _instance ??= Altimeter._constructor();
+    return _instance!;
+  }
 
   bool findAltimeter() {
     for (final address in SerialPort.availablePorts) {
@@ -32,7 +38,7 @@ class Altimeter {
     return port!;
   }
 
-  Altimeter() {
+  Altimeter._constructor() {
     if (findAltimeter()) {
       SerialPort sp = openPort(); 
       final disableInteractive = Uint8List.fromList("i\n".codeUnits);
@@ -46,6 +52,8 @@ class Altimeter {
       uid = int.parse(String.fromCharCodes(rawRead));
       sp.close();
     }
+
+    _instance = this;
   }
 
   /* 
