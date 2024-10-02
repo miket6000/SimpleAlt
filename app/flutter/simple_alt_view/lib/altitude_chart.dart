@@ -11,45 +11,34 @@ class AltitudeChart extends StatefulWidget {
 }
 
 class YAxis {
+  Recording recording;
+  String label;
   double minY = 0;
   double maxY = 0;
-  double offset = 0;
   double scalar = 0;
-  static int colourIndex = 0;
-  static const List<Color> colourList = [Colors.blue, Colors.deepOrange, Colors.green, Colors.pink, Colors.yellow];
-  Color colour = colourList[0];
   int precision = 2;
-  double getY(double y) => (y - offset) / scalar;
+  Color colour = Colors.blue;
+  List<FlSpot> spots = [];
 
-  YAxis(this.minY, this.maxY) {
+  double getY(double y) => y * scalar + minY;
+  
+  YAxis(this.recording, this.label) {
+    colour = records[label]!.colour;
+
+    minY = [...recording.rows.map((e) => e.elementAt(records[label]!.column))].reduce((a, b)=>(a < b ? a : b)); 
+    maxY = [...recording.rows.map((e) => e.elementAt(records[label]!.column))].reduce((a, b)=>(a > b ? a : b)); 
     if (minY == maxY) {
       scalar = 1;
     } else {
       scalar = (maxY - minY);
     }
 
-    offset = minY;
-    colour = colourList[colourIndex++ % colourList.length];
-  }
-}
-
-// PointData allows multiple columns of data to contain a reference to an axis
-class PointData {
-  late YAxis axis;
-  List<List<double>> data;
-  List<FlSpot> spots = []; // scaled data (0..1) for plotting
-
-  PointData(this.data) {
-    double minY = data.reduce((current, next)=>(current[1] < next[1] ? current : next))[1];
-    double maxY = data.reduce((current, next)=>(current[1] > next[1] ? current : next))[1];
-    axis = YAxis(minY, maxY);
-    spots = data.map((sample) => FlSpot(sample[0], axis.getY(sample[1]))).toList(); //update graph data
+    spots = [...recording.rows.map((e) => FlSpot(e[0], (e.elementAt(records[label]!.column) - minY)/ scalar))];
   }
 }
 
 class _AltitudeChartState extends State<AltitudeChart> {
-    
-  List<PointData> pointList = [];
+  Recording? recording; 
 
   @override
   void initState() {
@@ -85,21 +74,18 @@ class _AltitudeChartState extends State<AltitudeChart> {
 
   @override
   Widget build(BuildContext context) {
-    pointList.clear();
-    List<List<FlSpot>> points = [];
+    List<YAxis> axis = [];
     if (widget.recording != null) {
       for (var record in records.keys) {
-        List<List<double>> points = [];
-        for (var row in widget.recording!.rows) {
-          points.add([row[0], row[records[record]!.column]]);
+        if (records[record]!.plot) {
+          axis.add(YAxis(widget.recording!, record));
         }
-        pointList.add(PointData(points));
       }
     }
 
     return Row(
       children:[
-        for (var pd in pointList) customYAxis(pd.axis),
+        for (var ax in axis) customYAxis(ax),
         Expanded(
           child: Padding(
             padding: const EdgeInsets.only(left:20),
@@ -107,8 +93,8 @@ class _AltitudeChartState extends State<AltitudeChart> {
                 LineChartData (
                 //borderData: FlBorderData(border: const Border(bottom: BorderSide(), left: BorderSide())), 
                 lineBarsData: [
-                  for (PointData pointData in pointList) 
-                    LineChartBarData(spots: pointData.spots, dotData: const FlDotData(show: false,), color:pointData.axis.colour),
+                  for (var ax in axis)
+                    LineChartBarData(spots: ax.spots, dotData: const FlDotData(show: false,), color:ax.colour),
                 ],
                 titlesData: const FlTitlesData(
                   topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -126,7 +112,7 @@ class _AltitudeChartState extends State<AltitudeChart> {
                     getTooltipItems: (touchedSpots) {
                       return touchedSpots.map((LineBarSpot touchedSpot) {
                         return LineTooltipItem(
-                          '${points[0][touchedSpot.spotIndex].y.toStringAsFixed(1)}m', const TextStyle(),
+                          '${axis[touchedSpot.barIndex].getY(touchedSpot.y).toStringAsFixed(1)}${records[axis[touchedSpot.barIndex].label]!.unit}', const TextStyle(),
                         );
                       }).toList();
                     },

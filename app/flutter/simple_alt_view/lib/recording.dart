@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'package:flutter/material.dart';
 
 const double tickDuration = 0.01;
 
@@ -21,8 +22,10 @@ class Record {
   final String setting;
   final String unit;
   final int precision;
-  final int column ;
-  Record({required this.title, required this.setting, required this.length, required this.unit, required this.precision, required this.column});
+  final int column;
+  bool plot;
+  Color colour;
+  Record({required this.title, required this.setting, required this.length, required this.unit, required this.precision, required this.column, this.plot=true, this.colour=Colors.blue});
 }
 
 final Map<String, Setting> settings = {
@@ -48,11 +51,11 @@ final Map<String, Unit> units = {
 };
 
 final Map<String, Record> records = {
-  "A": Record(title:"Altitude",    setting:"a", length:4, unit:"m",   precision:1, column:1),
-  "P": Record(title:"Pressure",    setting:"p", length:4, unit:"hPa", precision:2, column:2),
-  "T": Record(title:"Temperature", setting:"t", length:2, unit:"C",   precision:1, column:3),
-  "V": Record(title:"Voltage",     setting:"v", length:2, unit:"V",   precision:2, column:4),
-  "S": Record(title:"Status",      setting:"s", length:1, unit:"-",   precision:0, column:5),
+  "A": Record(title:"Altitude",    setting:"a", length:4, unit:"m",   precision:1, column:1, colour:Colors.blue,    plot:true),
+  "P": Record(title:"Pressure",    setting:"p", length:4, unit:"hPa", precision:2, column:2, colour:Colors.orange,  plot:false),
+  "T": Record(title:"Temperature", setting:"t", length:2, unit:"C",   precision:1, column:3, colour:Colors.red,     plot:true),
+  "V": Record(title:"Voltage",     setting:"v", length:2, unit:"V",   precision:2, column:4, colour:Colors.purple,  plot:false),
+  "S": Record(title:"Status",      setting:"s", length:1, unit:"-",   precision:0, column:5, colour:Colors.green,   plot:false),
 };
 
 int swapBytes(Uint8List bytes) {
@@ -86,22 +89,8 @@ class Recording {
   double getDuration() => rows.length * (highestSampleRate / 100);
   List<String> sortedColumns = records.keys.toList()..sort((a, b) => records[a]!.column.compareTo(records[b]!.column));
 
-  List getAltitude() => [...rows.map((e) => [e[0], e.elementAt(records["A"]!.column)])];
-  List getTemperature() => [...rows.map((e) => [e[0], e.elementAt(records["T"]!.column)])];
-  List getPressure() => [...rows.map((e) => [e[0], e.elementAt(records["P"]!.column)])];
-  List getVoltage() => [...rows.map((e) => [e[0], e.elementAt(records["V"]!.column)])];
-  List getStatus() => [...rows.map((e) => [e[0], e.elementAt(records["S"]!.column)])];
- 
   void addValue(String label, double value) {
-    currentRow[records[label]!.column] = value;
-    if(records[label]!.setting == highestSampledRecordType) {
-      // Skip the first sample as it comes from the data inialization block in the altimeter
-      if (time > 0) {
-        currentRow[0] = time;
-        rows.add(List.from(currentRow));
-      }
-      time += tickDuration * highestSampleRate;
-    }
+    // deal with the special case tha this is an altitude record.
     if (label == "A") {
       if (groundLevel == double.infinity) {
         groundLevel = value;
@@ -109,6 +98,24 @@ class Recording {
       if (value > maxAltitude) {
         maxAltitude = value;
       }
+      value -= groundLevel;
+    }
+
+    // Add the data to the row
+    currentRow[records[label]!.column] = value;
+    
+    // If this sample was for the record with the highest sampled data rate, calculate the time advance and create the new row.
+    // Note: This logic is incorrect. Consider the case where one variable (A) is sampled every 3 ticks, and a second (B) every 4.
+    // We won't create the second row until the 6th tick, but new data was available for (B) on the 4th. This essentially adds
+    // phase noise to our data. At the moment this doesnt matter, but we should really calculate the LCM of all variables and
+    // update that often (or just use '1' and update for every tick).
+    if(records[label]!.setting == highestSampledRecordType) {
+      // Skip the first sample as it comes from the data inialization block in the altimeter
+      if (time > 0) {
+        currentRow[0] = time;
+        rows.add(List.from(currentRow));
+      }
+      time += tickDuration * highestSampleRate;
     }
   }
 
