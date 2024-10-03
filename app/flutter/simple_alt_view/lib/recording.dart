@@ -23,6 +23,7 @@ class Record {
   final String unit;
   final int precision;  //CSV print prescision
   final int column;     //CSV column (0 is always time)
+  double time = 0;
   bool plot;            //Do or donot show in graphs
   Color colour;         //Colour of graph line and axis text
   Record({required this.title, required this.setting, required this.length, required this.unit, required this.precision, required this.column, this.plot=true, this.colour=Colors.blue});
@@ -82,9 +83,9 @@ class Recording {
   double groundLevel = double.infinity;
   double time = 0;
 
-  Map<String, List<double>> values = {};
+  Map<String, List<List<double>>> values = {};
 
-  double getDuration() => values["A"]!.length * tickDuration;
+  double getDuration() => values["A"]!.last[0];
 
   void addValue(String label, double value) {
     // deal with the special case tha this is an altitude record.
@@ -101,12 +102,17 @@ class Recording {
     // Add the value to the record for this sample, and all the next unrecorded samples indicated by the sampleRate.
     var sampleRate = settings[records[label]!.setting]!.value;
     values[label] ??= [];
-    values[label]!.addAll(List.filled(sampleRate, value));
+    values[label]!.add([records[label]!.time, value]);
+    records[label]!.time += tickDuration * sampleRate;
   }
 
   Recording(Uint8List buffer) {
     int index = 0;
     bool endOfBuffer = false;
+
+    // reset record times
+    records.forEach((k,v)=>(v.time = 0));
+
     String label = String.fromCharCode(buffer[index]);
     while(!endOfBuffer && records.containsKey(label)) {
       Unit unit = units[records[label]!.unit]!;
@@ -133,7 +139,7 @@ class Recording {
       csv += "\n${(tick * tickDuration).toStringAsFixed(2)}";
       for (var label in sortedColumns) {
         if (tick < values[label]!.length) {
-          double value = values[label]![tick];
+          double value = values[label]![tick][1];
           csv += ", ${value.toStringAsFixed(records[label]!.precision)}";
         } else {
           csv += ", ";
