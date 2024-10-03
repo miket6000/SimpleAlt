@@ -13,7 +13,7 @@ class Unit {
   final String title;
   final double slope;
   final double offset;
-  Unit({required this.title, required this.slope, required this.offset});
+  const Unit({required this.title, required this.slope, required this.offset});
 }
 
 class Record {
@@ -21,10 +21,10 @@ class Record {
   final int length;
   final String setting;
   final String unit;
-  final int precision;
-  final int column;
-  bool plot;
-  Color colour;
+  final int precision;  //CSV print prescision
+  final int column;     //CSV column (0 is always time)
+  bool plot;            //Do or donot show in graphs
+  Color colour;         //Colour of graph line and axis text
   Record({required this.title, required this.setting, required this.length, required this.unit, required this.precision, required this.column, this.plot=true, this.colour=Colors.blue});
 }
 
@@ -39,21 +39,21 @@ final Map<String, Setting> settings = {
   "r": Setting(title:"Recording Start Address"),
 };
 
-final Map<String, Unit> units = {
+const Map<String, Unit> units = {
   "V":    Unit(title:"Voltage",       slope:1000,         offset:0),
   "m":    Unit(title:"Altitude",      slope:100,          offset:0),
   "ft":   Unit(title:"Altitude",      slope:30.48,        offset:0),
   "hPa":  Unit(title:"Pressure",      slope:100,          offset:0),
   "psi":  Unit(title:"Pressure",      slope:6894.75729,   offset:0),
-  "C":    Unit(title:"Temperature",   slope:100,          offset:0),
-  "F":    Unit(title:"Temperature",   slope:180,          offset:32),
-  "-":    Unit(title:"Raw",           slope:1,            offset:0),
+  "°C":   Unit(title:"Temperature",   slope:100,          offset:0),
+  "°F":   Unit(title:"Temperature",   slope:180,          offset:32),
+  "-":    Unit(title:"Status",        slope:1,            offset:0),
 };
 
 final Map<String, Record> records = {
   "A": Record(title:"Altitude",    setting:"a", length:4, unit:"m",   precision:1, column:1, colour:Colors.blue,    plot:true),
   "P": Record(title:"Pressure",    setting:"p", length:4, unit:"hPa", precision:2, column:2, colour:Colors.orange,  plot:false),
-  "T": Record(title:"Temperature", setting:"t", length:2, unit:"C",   precision:1, column:3, colour:Colors.red,     plot:true),
+  "T": Record(title:"Temperature", setting:"t", length:2, unit:"°C",  precision:1, column:3, colour:Colors.red,     plot:true),
   "V": Record(title:"Voltage",     setting:"v", length:2, unit:"V",   precision:2, column:4, colour:Colors.purple,  plot:false),
   "S": Record(title:"Status",      setting:"s", length:1, unit:"-",   precision:0, column:5, colour:Colors.green,   plot:false),
 };
@@ -81,13 +81,10 @@ class Recording {
   double maxAltitude = 0;
   double groundLevel = double.infinity;
   double time = 0;
-  late String highestSampledRecordType;
-  int highestSampleRate = 0xffffffff;
-  List<List> rows = [];
-  List<double> currentRow = [0, 0, 0, 0, 0, 0];
-  int getRowCount() => rows.length;
-  double getDuration() => rows.length * (highestSampleRate / 100);
-  List<String> sortedColumns = records.keys.toList()..sort((a, b) => records[a]!.column.compareTo(records[b]!.column));
+
+  Map<String, List<double>> values = {};
+
+  double getDuration() => values["A"]!.length * tickDuration;
 
   void addValue(String label, double value) {
     // deal with the special case tha this is an altitude record.
@@ -101,39 +98,16 @@ class Recording {
       value -= groundLevel;
     }
 
-    // Add the data to the row
-    currentRow[records[label]!.column] = value;
-    
-    // If this sample was for the record with the highest sampled data rate, calculate the time advance and create the new row.
-    // Note: This logic is incorrect. Consider the case where one variable (A) is sampled every 3 ticks, and a second (B) every 4.
-    // We won't create the second row until the 6th tick, but new data was available for (B) on the 4th. This essentially adds
-    // phase noise to our data. At the moment this doesnt matter, but we should really calculate the LCM of all variables and
-    // update that often (or just use '1' and update for every tick).
-    if(records[label]!.setting == highestSampledRecordType) {
-      // Skip the first sample as it comes from the data inialization block in the altimeter
-      if (time > 0) {
-        currentRow[0] = time;
-        rows.add(List.from(currentRow));
-      }
-      time += tickDuration * highestSampleRate;
-    }
-  }
-
-  findHighestSampledRecordType() {
-    records.forEach((key, value) {
-      var sampleRate = settings[value.setting]!.value;
-      if (sampleRate != 0 && sampleRate < highestSampleRate) {
-        highestSampledRecordType = value.setting;
-        highestSampleRate = sampleRate;
-      }
-    });   
+    // Add the value to the record for this sample, and all the next unrecorded samples indicated by the sampleRate.
+    var sampleRate = settings[records[label]!.setting]!.value;
+    values[label] ??= [];
+    values[label]!.addAll(List.filled(sampleRate, value));
   }
 
   Recording(Uint8List buffer) {
     int index = 0;
     bool endOfBuffer = false;
     String label = String.fromCharCode(buffer[index]);
-    findHighestSampledRecordType();
     while(!endOfBuffer && records.containsKey(label)) {
       Unit unit = units[records[label]!.unit]!;
       double value = swapBytes(buffer.sublist(index + 1, index + 1 + records[label]!.length)) / unit.slope + unit.offset;
@@ -148,17 +122,22 @@ class Recording {
   }
 
   String getCSV() {
+    List<String> sortedColumns = records.keys.toList()..sort((a, b) => records[a]!.column.compareTo(records[b]!.column));
     String csv = "Time";
 
     for (var label in sortedColumns) {
       csv += ", ${records[label]!.title}";
     }
 
-    for (var row in rows) {
-      csv += "\n${row[0].toStringAsFixed(2)}";
+    for (int tick = 0; tick <= getDuration() / tickDuration; tick++) {
+      csv += "\n${(tick * tickDuration).toStringAsFixed(2)}";
       for (var label in sortedColumns) {
-        double value = row[records[label]!.column];
-        csv += ", ${value.toStringAsFixed(records[label]!.precision)}";
+        if (tick < values[label]!.length) {
+          double value = values[label]![tick];
+          csv += ", ${value.toStringAsFixed(records[label]!.precision)}";
+        } else {
+          csv += ", ";
+        }
       }
     }
 

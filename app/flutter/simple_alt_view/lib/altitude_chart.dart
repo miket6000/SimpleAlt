@@ -25,15 +25,15 @@ class YAxis {
   YAxis(this.recording, this.label) {
     colour = records[label]!.colour;
 
-    minY = [...recording.rows.map((e) => e.elementAt(records[label]!.column))].reduce((a, b)=>(a < b ? a : b)); 
-    maxY = [...recording.rows.map((e) => e.elementAt(records[label]!.column))].reduce((a, b)=>(a > b ? a : b)); 
+    minY = recording.values[label]!.reduce((a, b)=>(a < b ? a : b)); 
+    maxY = recording.values[label]!.reduce((a, b)=>(a > b ? a : b)); 
     if (minY == maxY) {
       scalar = 1;
     } else {
       scalar = (maxY - minY);
     }
 
-    spots = [...recording.rows.map((e) => FlSpot(e[0], (e.elementAt(records[label]!.column) - minY)/ scalar))];
+    recording.values[label]!.asMap().forEach((index, value)=>spots.add(FlSpot(index * tickDuration, (value - minY)/scalar)));
   }
 }
 
