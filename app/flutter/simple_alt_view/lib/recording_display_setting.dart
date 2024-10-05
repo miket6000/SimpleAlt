@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:simple_alt_view/graph_page.dart';
 import 'package:simple_alt_view/recording.dart';
 
 class RecordDisplaySetting extends StatefulWidget {
@@ -18,6 +19,7 @@ class _RecordDisplaySettingState extends State<RecordDisplaySetting> {
         Switch(
           value: widget.record.plot, 
           onChanged: (bool value) {
+            graphPageKey.currentState!.update();
             setState(() => widget.record.plot = value);
           },
         ), 

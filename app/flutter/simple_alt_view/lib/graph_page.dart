@@ -7,6 +7,8 @@ import 'package:simple_alt_view/altimeter.dart';
 import 'package:simple_alt_view/altitude_chart.dart';
 import 'package:simple_alt_view/recording.dart';
 
+final GlobalKey<GraphPageState> graphPageKey = GlobalKey<GraphPageState>(); 
+
 Future screenshot() async {
   RenderRepaintBoundary boundary = screenshotKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
   var image = await boundary.toImage();
@@ -38,6 +40,13 @@ class GraphPageState extends State<GraphPage> with AutomaticKeepAliveClientMixin
     }
     setState(() { /* required to force update of dropdownMenu*/ });
   }
+
+  void update() {
+    setState(() {
+
+    });
+  }
+
 
   void onSave() {
     final scaffold = ScaffoldMessenger.of(context);

@@ -5,7 +5,6 @@ import 'package:simple_alt_view/setting_page.dart';
 
 
 class HomePage extends StatelessWidget {
-  final GlobalKey<GraphPageState> _key = GlobalKey<GraphPageState>(); 
   final String title;
   final altimeter = Altimeter();
   
@@ -21,7 +20,7 @@ class HomePage extends StatelessWidget {
 
     altimeter.recordingList.clear();
     altimeter.parseData();
-    _key.currentState?.refreshLogList();
+    graphPageKey.currentState?.refreshLogList();
   }
 
   @override
@@ -47,7 +46,7 @@ class HomePage extends StatelessWidget {
           ),
           body: TabBarView(
             children: [
-              GraphPage(key: _key),
+              GraphPage(key: graphPageKey),
               const SettingPage(),
             ],
           ),
