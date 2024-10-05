@@ -31,6 +31,7 @@ class HomePage extends StatelessWidget {
         child: Scaffold(
           appBar: AppBar(
             bottom: const TabBar(
+              indicatorSize: TabBarIndicatorSize.tab,            
               tabs: [
                 Tab(icon: Icon(Icons.show_chart)),
                 Tab(icon: Icon(Icons.settings)),

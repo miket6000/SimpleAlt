@@ -1,8 +1,21 @@
 import 'dart:io';
+import 'dart:ui' as ui;
+import 'dart:typed_data';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/material.dart';
 import 'package:simple_alt_view/altimeter.dart';
 import 'package:simple_alt_view/altitude_chart.dart';
 import 'package:simple_alt_view/recording.dart';
+
+Future screenshot() async {
+  RenderRepaintBoundary boundary = screenshotKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+  var image = await boundary.toImage();
+  ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+  Uint8List pngBytes = byteData!.buffer.asUint8List();
+  const directory = '.';
+  File imgFile = File('$directory/ScreenShot.png');
+  imgFile.writeAsBytes(pngBytes);
+}
 
 class GraphPage extends StatefulWidget {
   const GraphPage({super.key});
@@ -85,10 +98,15 @@ class GraphPageState extends State<GraphPage> with AutomaticKeepAliveClientMixin
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 recordingDropdown,
+                const Spacer(),
                 ElevatedButton(
                   onPressed: onSave, 
                   child: const Text("Export as CSV"),
-                )
+                ),
+                const ElevatedButton(
+                  onPressed: screenshot, 
+                  child: Text("Export as PNG"),
+                ),
               ]
             )
           )
