@@ -56,7 +56,6 @@
 #define DEFAULT_VOLTAGE_SR        SECONDS_TO_TICKS(1)
 #define DEFAULT_STATUS_SR         0
 #define DEFAULT_POWER_OFF_TIMEOUT SECONDS_TO_TICKS(1200)
- 
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -466,12 +465,6 @@ int main(void)
             led_add_sequence(recording_sequence);
             ground_altitude = altitude;
             max_altitude = 0;
-            fs_save('A', &altitude, sizeof(altitude));
-            fs_save('P', &pressure, sizeof(pressure));
-            fs_save('T', &temperature, sizeof(temperature));
-            fs_save('V', &voltage, sizeof(voltage));
-            fs_save('S', &status, sizeof(status));
-          
           }
 
           last_state = state;
