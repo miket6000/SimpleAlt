@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:simple_alt_view/altimeter.dart';
 import 'package:simple_alt_view/graph_page.dart';
+import 'package:simple_alt_view/setting_page.dart';
+
 
 class HomePage extends StatelessWidget {
   final GlobalKey<GraphPageState> _key = GlobalKey<GraphPageState>(); 
@@ -45,7 +47,7 @@ class HomePage extends StatelessWidget {
           body: TabBarView(
             children: [
               GraphPage(key: _key),
-              const Icon(Icons.settings),
+              const SettingPage(),
             ],
           ),
         ),
