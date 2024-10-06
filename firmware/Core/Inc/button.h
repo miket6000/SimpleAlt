@@ -11,6 +11,7 @@ typedef enum {
   BUTTON_RELEASE_3
 } ButtonState;
 
+ButtonState button_read();
 ButtonState button_get_state();
 
 #endif //BUTTON_H

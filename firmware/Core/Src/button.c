@@ -2,7 +2,7 @@
 #include <stdint.h>
 #include "main.h"
 
-static uint8_t button_read(void) {
+ButtonState button_read(void) {
   return HAL_GPIO_ReadPin(BUTTON_GPIO_Port, BUTTON_Pin);
 }
 
@@ -10,7 +10,7 @@ ButtonState button_get_state() {
   static uint16_t button_counter = 0;
   static ButtonState button_result = BUTTON_IDLE;
 
-  if (button_read() == 1) { // button is down
+  if (button_read() == BUTTON_DOWN) {
     button_counter++;
     if (button_counter > 2) {
       if (button_result == BUTTON_IDLE) {

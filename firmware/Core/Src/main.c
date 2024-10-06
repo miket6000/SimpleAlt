@@ -238,6 +238,7 @@ void erase_flash(void *parameter) {
 void factory_reset(void *parameter) {
   AltimeterConfig *config = (AltimeterConfig *)parameter;
   
+  // set the default config, then call erase flash. 
   config->altitude_sample_rate    = DEFAULT_ALTITUDE_SR;
   config->pressure_sample_rate    = DEFAULT_PRESSURE_SR;
   config->temperature_sample_rate = DEFAULT_TEMPERATURE_SR;
@@ -245,15 +246,7 @@ void factory_reset(void *parameter) {
   config->status_sample_rate      = DEFAULT_STATUS_SR;
   config->power_off_timeout       = DEFAULT_POWER_OFF_TIMEOUT;
   
-  fs_erase();
-  
-  fs_save_config('p', &config->pressure_sample_rate);
-  fs_save_config('t', &config->temperature_sample_rate);
-  fs_save_config('a', &config->altitude_sample_rate);
-  fs_save_config('v', &config->voltage_sample_rate);
-  fs_save_config('s', &config->status_sample_rate);
-  fs_save_config('o', &config->power_off_timeout);
-  print("OK", 2);
+  erase_flash(config);
 }
 
 
@@ -339,7 +332,7 @@ int main(void)
   fs_read_config('o', &config.power_off_timeout);
   fs_read_config('m', &max_altitude);
 
-  power_set_timeout(SECONDS_TO_TICKS(config.power_off_timeout));
+  power_set_timeout(config.power_off_timeout);
 
   if (max_altitude > 0) {
     led_add_number_sequence(max_altitude);
@@ -365,9 +358,8 @@ int main(void)
   cmd_add("UID", print_uint32, &uid);
   cmd_set_print_function(print);
 
-  //1 second delay to give the user time to release the power on button. 
-  //This prevents us detecting the release as a seperate event later on.
-  HAL_Delay(SECONDS_TO_TICKS(1));
+  // Wait for the button to be released
+  while (button_read() == BUTTON_DOWN);
 
   /* USER CODE END 2 */
 
