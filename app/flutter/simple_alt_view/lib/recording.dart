@@ -5,8 +5,9 @@ const double tickDuration = 0.01;
 
 class Setting {
   final String title;
+  bool configurable;
   int value;
-  Setting({required this.title, this.value = 0});
+  Setting({required this.title, this.value = 0, this.configurable = true});
 }
 
 class Unit {
@@ -35,9 +36,9 @@ final Map<String, Setting> settings = {
   "t": Setting(title:"Temperature Sample Rate"),
   "v": Setting(title:"Voltage Sample Rate"),
   "s": Setting(title:"Status Sample Rate"), 
-  "m": Setting(title:"Maximum Altitude"),
+  "m": Setting(title:"Maximum Altitude", configurable:false),
   "o": Setting(title:"Power Off Timeout"),
-  "r": Setting(title:"Recording Start Address"),
+  "r": Setting(title:"Recording Start Address", configurable:false),
 };
 
 const Map<String, Unit> units = {
