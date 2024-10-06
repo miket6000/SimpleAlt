@@ -8,7 +8,7 @@
 #define VOLTAGE_OFFSET    200
 #define NUM_ADC_BITS      12
 #define VOLTAGE_SLOPE     6200
-#define MIN_TIMEOUT       60
+#define MIN_TIMEOUT       SECONDS_TO_TICKS(60)
 
 #ifdef DISABLE_SLEEP
 #define VOLTAGE_LOW_ALARM 0 
