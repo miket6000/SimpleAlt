@@ -30,27 +30,33 @@ class Altimeter {
     return false;
   }
 
-  SerialPort openPort() {
-    port!.openReadWrite();
-    SerialPortConfig config = port!.config;
-    config.setFlowControl(SerialPortFlowControl.none);
-    port!.config = config;
-    return port!;
+  SerialPort? openPort() {
+    try { 
+      port!.openReadWrite();
+      SerialPortConfig config = port!.config;
+      config.setFlowControl(SerialPortFlowControl.none);
+      port!.config = config;
+    } on Error {
+      return null;
+    }
+    return port;
   }
 
   Altimeter._constructor() {
     if (findAltimeter()) {
-      SerialPort sp = openPort(); 
-      final disableInteractive = Uint8List.fromList("i\n".codeUnits);
-      final getUID = Uint8List.fromList("UID\n".codeUnits);
-      buffer.fillRange(0, flashSize, 0x55);
+      SerialPort? sp = openPort();
+      if (sp != null) {
+        final disableInteractive = Uint8List.fromList("i\n".codeUnits);
+        final getUID = Uint8List.fromList("UID\n".codeUnits);
+        buffer.fillRange(0, flashSize, 0x55);
       
-      sp.write(disableInteractive, timeout: 1000);
-      sp.read(1000, timeout: 1000); // clear the read buffer
-      sp.write(getUID, timeout: 1000);
-      var rawRead = sp.read(uidLength, timeout: 1000);
-      uid = int.parse(String.fromCharCodes(rawRead));
-      sp.close();
+        sp.write(disableInteractive, timeout: 1000);
+        sp.read(1000, timeout: 1000); // clear the read buffer
+        sp.write(getUID, timeout: 1000);
+        var rawRead = sp.read(uidLength, timeout: 1000);
+        uid = int.parse(String.fromCharCodes(rawRead));
+        sp.close();
+      }
     }
 
     _instance = this;
@@ -156,4 +162,17 @@ class Altimeter {
       }
     }
   }
+
+  bool saveSetting(String setting) {
+    SerialPort? sp = openPort(); 
+    if (sp == null) {
+      return false;
+    }
+
+    final setSetting = Uint8List.fromList("SET $setting ${settings[setting]!.value}\n".codeUnits);
+    sp.write(setSetting, timeout: 1000);
+    sp.close();
+    return true;
+  }
+
 }

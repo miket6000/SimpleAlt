@@ -19,6 +19,13 @@ class Scale {
   double tick = 0;
 }
 
+extension X<T> on List<T> {
+  List<T> everyNth(int n) {
+    if (n == 0) n = 1;
+    return [for (var i = 0; i < length; i += n) this[i]];
+  }
+}
+
 class YAxis {
   Recording recording;
   int numLabels;
@@ -72,7 +79,8 @@ class YAxis {
       scalar = (scale.max - scale.min);
     }
 
-    spots = [...recording.values[label]!.map((e)=>FlSpot(e[0], (e[1] - scale.min)/scalar))];
+    int reduction = recording.values[label]!.length ~/ 2000;
+    spots = [...recording.values[label]!.everyNth(reduction).map((e)=>FlSpot(e[0], (e[1] - scale.min)/scalar))];
   }
 }
 

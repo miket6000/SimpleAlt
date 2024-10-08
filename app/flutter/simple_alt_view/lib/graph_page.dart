@@ -20,14 +20,14 @@ Future screenshot() async {
 }
 
 class GraphPage extends StatefulWidget {
-  const GraphPage({super.key});
+  final Altimeter altimeter;
+  const GraphPage({super.key, required this.altimeter});
   @override
   State<GraphPage> createState() => GraphPageState();
 }
 
 class GraphPageState extends State<GraphPage> with AutomaticKeepAliveClientMixin {
   //final GlobalKey<_AltitudeChartState> _key = GlobalKey();
-  final altimeter = Altimeter();
   Recording? selectedRecording;
 
   @override
@@ -35,8 +35,8 @@ class GraphPageState extends State<GraphPage> with AutomaticKeepAliveClientMixin
 
   void refreshLogList() {
     selectedRecording = null;
-    if (altimeter.recordingList.isNotEmpty) {
-      selectedRecording = altimeter.recordingList.last;
+    if (widget.altimeter.recordingList.isNotEmpty) {
+      selectedRecording = widget.altimeter.recordingList.last;
     }
     setState(() { /* required to force update of dropdownMenu*/ });
   }
@@ -60,7 +60,7 @@ class GraphPageState extends State<GraphPage> with AutomaticKeepAliveClientMixin
       var second = now.second.toString().padLeft(2, '0');
       var datetime = "${now.year}$month${day}_$hour$minute$second"; 
       
-      String filename = "SimpleAlt-${altimeter.uid.toRadixString(16)}-${altimeter.recordingList.indexOf(selectedRecording!)}-$datetime.csv";
+      String filename = "SimpleAlt-${widget.altimeter.uid.toRadixString(16)}-${widget.altimeter.recordingList.indexOf(selectedRecording!)}-$datetime.csv";
       String csv = selectedRecording!.getCSV();
       File file = File(filename);
       file.writeAsStringSync(csv);
@@ -82,11 +82,11 @@ class GraphPageState extends State<GraphPage> with AutomaticKeepAliveClientMixin
       onSelected: (Recording? recording) {
         // user selected a recording...
         selectedRecording = recording!;
-        altimeter.recordingList[recording.index]; // get data for selected recording
+        widget.altimeter.recordingList[recording.index]; // get data for selected recording
         setState(() {});
       },
-      dropdownMenuEntries: altimeter.recordingList.map<DropdownMenuEntry<Recording>>((Recording recording) {
-        return DropdownMenuEntry<Recording>(value: recording, label: 'Recording ${altimeter.recordingList.indexOf(recording)}, duration ${recording.getDuration().toStringAsFixed(1)}s');
+      dropdownMenuEntries: widget.altimeter.recordingList.map<DropdownMenuEntry<Recording>>((Recording recording) {
+        return DropdownMenuEntry<Recording>(value: recording, label: 'Recording ${widget.altimeter.recordingList.indexOf(recording)}, duration ${recording.getDuration().toStringAsFixed(1)}s');
       }).toList(),
     );
 
