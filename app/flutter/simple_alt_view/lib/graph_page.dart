@@ -38,7 +38,7 @@ class GraphPageState extends State<GraphPage> with AutomaticKeepAliveClientMixin
     if (widget.altimeter.recordingList.isNotEmpty) {
       selectedRecording = widget.altimeter.recordingList.last;
     }
-    setState(() { /* required to force update of dropdownMenu*/ });
+    setState(() { /* update dropdown menu */ });
   }
 
   void update() {
@@ -61,7 +61,7 @@ class GraphPageState extends State<GraphPage> with AutomaticKeepAliveClientMixin
       var datetime = "${now.year}$month${day}_$hour$minute$second"; 
       
       String filename = "SimpleAlt-${widget.altimeter.uid.toRadixString(16)}-${widget.altimeter.recordingList.indexOf(selectedRecording!)}-$datetime.csv";
-      String csv = selectedRecording!.getCSV();
+      String csv = selectedRecording!.getCSV().join("\n");
       File file = File(filename);
       file.writeAsStringSync(csv);
 

@@ -78,15 +78,29 @@ int swapBytes(Uint8List bytes) {
   return value;
 }
 
+extension X<T> on List<List<double>> {
+  double lastBefore(double n) {
+    return where((e)=>(e[0] <= n)).toList().last[0];   
+  }
+}
+
 class Recording {
   int index = 0;
   double maxAltitude = 0;
   double groundLevel = double.infinity;
-  double time = 0;
 
   Map<String, List<List<double>>> values = {};
 
-  double getDuration() => values["A"]!.last[0];
+  double getDuration(){
+    double maxTime = 0;
+    values.forEach((key, value){
+      var time = value.last[0];
+      if (time > maxTime) {
+        maxTime = time;
+      }
+    });
+    return maxTime;
+  }
 
   void addValue(String label, double value) {
     // deal with the special case tha this is an altitude record.
@@ -128,24 +142,51 @@ class Recording {
     } 
   }
 
-  String getCSV() {
-    List<String> sortedColumns = records.keys.toList()..sort((a, b) => records[a]!.column.compareTo(records[b]!.column));
-    String csv = "Time";
+  // VERY inefficient. Basically unworkably so. 
+  // Also not very good as not all values are changed at the same time. I probably need to do like
+  // I used to and create the data a row at a time, ideally only on data changes. 
+  // Fundamentally I can have records that are hundreds of thousands of entries and millions of 
+  // ticks long. This just creates problems.
+
+  // Alternative approach...
+  // use a variable to track when each list will next change. Walk though time and if a variable 
+  // (or vairables) are changing, then create a row. It will mean that rows won't be a fixed time
+  // step, but does that matter?
+
+  // Or, just give up entirely.
+  List<String> getCSV() {
+    List<String> sortedColumns = values.keys.toList()..sort((a, b) => records[a]!.column.compareTo(records[b]!.column));
+    Map<String, int> timeKeeper = {};
+    var shortestTick = 0xffffffff;
+    var longestList = "";
+    
+    List<String> csv = [];
+    String line = "Time";
 
     for (var label in sortedColumns) {
-      csv += ", ${records[label]!.title}";
+      timeKeeper[label] = 0;
+      var sampleRate = settings[records[label]!.setting]!.value;
+      if (sampleRate < shortestTick) {
+        shortestTick = sampleRate;
+        longestList = label;
+      }
+      line += ", ${records[label]!.title}";
     }
 
-    for (int tick = 0; tick <= getDuration() / tickDuration; tick++) {
-      csv += "\n${(tick * tickDuration).toStringAsFixed(2)}";
+    csv.add(line);
+
+    for (int tick = 0; tick < values[longestList]!.length; tick++) {
+      var time = tick * shortestTick * tickDuration;
+      line = time.toStringAsFixed(3);
       for (var label in sortedColumns) {
-        if (tick < values[label]!.length) {
-          double value = values[label]![tick][1];
-          csv += ", ${value.toStringAsFixed(records[label]!.precision)}";
-        } else {
-          csv += ", ";
+        if (time > values[label]![timeKeeper[label]!][0] && 
+            timeKeeper[label]! < values[label]!.length - 1) {
+          timeKeeper[label] = timeKeeper[label]! + 1;
         }
+        double value = values[label]![timeKeeper[label]!][1];
+        line += ", ${value.toStringAsFixed(records[label]!.precision)}";
       }
+      csv.add(line);
     }
 
     return csv;

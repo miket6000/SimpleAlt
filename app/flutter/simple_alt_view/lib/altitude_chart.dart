@@ -14,35 +14,16 @@ class AltitudeChart extends StatefulWidget {
 }
 
 class Scale {
-  double min = 0;
-  double max = 0;
-  double tick = 0;
-}
+  double min;
+  double max;
+  double tick = 1;
+  double range = 1;
+  final int numTicks;
 
-extension X<T> on List<T> {
-  List<T> everyNth(int n) {
-    if (n == 0) n = 1;
-    return [for (var i = 0; i < length; i += n) this[i]];
-  }
-}
-
-class YAxis {
-  Recording recording;
-  int numLabels;
-  String label;
-  double scalar = 0;
-  Scale scale = Scale();
-  int precision = 2;
-  Color colour = Colors.blue;
-  List<FlSpot> spots = [];
-
-  double getY(double y) => y * scalar + scale.min;
-
-  void getScale(double minY, maxY) {
+  update(double min, double max) {
     double log10(x)=>log(x)/log(10);
     
-    double minTickSize = (maxY - minY) / numLabels;
-    double tick = 1;
+    double minTickSize = (max - min) / numTicks;
     if (minTickSize != 0) {
       tick = pow(10, log10(minTickSize).floor()) * 1.0;
     }
@@ -58,42 +39,62 @@ class YAxis {
       tick * 1;
     }
 
-    scale.min = (minY / tick).floor() * tick;
-    scale.max = scale.min + (numLabels) * tick;
-    scale.tick = tick;
+    this.min = (min / tick).floor() * tick;
+    this.max = this.min + (numTicks) * tick;
+    range = (this.min == this.max) ? 1 : this.max - this.min;
   }
-  
-  YAxis(this.recording, this.label, this.numLabels) {
-    colour = records[label]!.colour;
 
-    // get the min and max values for this axis
-    var minY = recording.values[label]!.reduce((a, b)=>(a[1] < b[1] ? a : b))[1]; 
-    var maxY = recording.values[label]!.reduce((a, b)=>(a[1] > b[1] ? a : b))[1]; 
-
-
-    getScale(minY, maxY);
-
-    if (scale.min == scale.max) {
-      scalar = 1;
-    } else {
-      scalar = (scale.max - scale.min);
-    }
-
-    int reduction = recording.values[label]!.length ~/ 2000;
-    spots = [...recording.values[label]!.everyNth(reduction).map((e)=>FlSpot(e[0], (e[1] - scale.min)/scalar))];
+  Scale({this.min = 0, this.max = 1, required this.numTicks}) {
+    update(min, max);
   }
 }
 
-Widget customYAxisLabel({required String value, required Color colour}) {
-  return Text(
-    value,
-    style: TextStyle(fontSize: 12, color: colour),   
-  );
+extension X<T> on List<T> {
+  List<T> everyNth(int n) {
+    if (n == 0) n = 1;
+    return [for (var i = 0; i < length; i += n) this[i]];
+  }
+}
+
+class YAxis {
+  Recording recording;
+  int numTicks;
+  String label;
+  late Scale scale;
+  int precision = 2;
+  Color colour = Colors.blue;
+  bool get visible => records[label]!.plot;
+  List<FlSpot> spots = [];
+  List<List<double>> visibleValues = [];
+
+  double realY(double y) => y * scale.range + scale.min;
+  double graphY(double y) => (y - scale.min) / scale.range;
+  
+  updateScale() {
+    var min = visibleValues.reduce((a, b)=>(a[1] < b[1] ? a : b))[1]; 
+    var max = visibleValues.reduce((a, b)=>(a[1] > b[1] ? a : b))[1];
+    scale.update(min, max);
+  }
+
+  updateSpots(RangeValues zoom) {
+    var length = recording.values[label]!.length;
+    visibleValues = recording.values[label]!.sublist((length * zoom.start).toInt(), (length * zoom.end).toInt());
+    int reduction = visibleValues.length ~/ 2000;
+    spots = [...visibleValues.everyNth(reduction).map((e)=>FlSpot(e[0], graphY(e[1])))];
+  }
+
+  YAxis(this.recording, this.label, this.numTicks) {
+    colour = records[label]!.colour;
+    visibleValues = recording.values[label]!;
+    scale = Scale(numTicks:numTicks);
+    updateScale();
+    updateSpots(const RangeValues(0, 1.0));
+  }
 }
 
 Widget customYAxis(YAxis axis) {
   List<double> labels = [];
-  for (int i = axis.numLabels; i >= 0; i--) {
+  for (int i = axis.numTicks; i >= 0; i--) {
     labels.add(axis.scale.min + i * axis.scale.tick);
   }
   return Padding(
@@ -102,82 +103,105 @@ Widget customYAxis(YAxis axis) {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         for (var label in labels)
-        customYAxisLabel(value: label.toStringAsFixed(axis.precision), colour:axis.colour),
+          Text(
+            label.toStringAsFixed(axis.precision),
+            style: TextStyle(fontSize: 12, color: axis.colour),   
+          )
       ],
     )
   );
 }
  
 class _AltitudeChartState extends State<AltitudeChart> {
-  Recording? recording; 
-  static const numLabels = 20;
-
-  @override
-  void initState() {
-  super.initState();
-  }
-  
+  static const numTicks = 20;
+  RangeValues _zoomSliderValues = const RangeValues(0, 1.0);
+  List<YAxis> axis = [];
   
   @override
   Widget build(BuildContext context) {
-    List<YAxis> axis = [];
-    if (widget.recording != null) {
+    if (widget.recording != null && axis.isEmpty) {
       for (var recordLabel in widget.recording!.values.keys) {
-        if (records[recordLabel]!.plot) {
-          axis.add(YAxis(widget.recording!, recordLabel, numLabels));
-        }
+        axis.add(YAxis(widget.recording!, recordLabel, numTicks));
       }
     }
+    var visibleAxis = axis.where((e)=>e.visible).toList();
 
     return RepaintBoundary(
       key: screenshotKey,
-      child: Row(
+      child: Column(
         children:[
-          Padding(
-            padding: const EdgeInsets.only(bottom:20),
-            child:
-              Row(
-                children:[
-                  for (var ax in axis) customYAxis(ax)
-                ],
-              ), 
-          ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.only(left:20, top:4),
-                child: LineChart(
-                  LineChartData (
-                  //borderData: FlBorderData(border: const Border(bottom: BorderSide(), left: BorderSide())),
-                  gridData:const FlGridData(horizontalInterval: 1/numLabels),
-                  lineBarsData: [
-                    for (var ax in axis)
-                      LineChartBarData(spots: ax.spots, dotData: const FlDotData(show: false,), color:ax.colour),
-                  ],
-                  titlesData: const FlTitlesData(
-                    topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)), 
-                    //bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, interval: 20)),
-                  ),
-                  //maxX: (dataLength > 1 ? ((points[0].reduce((cur, next) => cur.x > next.x ? cur: next)).x / 10).ceil() * 10.0 : 0),
-                  minY: 0, //(dataLength > 1 ? ((points[0].reduce((cur, next) => cur.y < next.y ? cur: next)).y / 10).floor() * 10.0 : 0),
-                  maxY: 1.0, //(dataLength > 1 ? ((points[0].reduce((cur, next) => cur.y > next.y ? cur: next)).y / 10).ceil() * 10.0 : 0),
-                  lineTouchData: LineTouchData(
-                    touchTooltipData: LineTouchTooltipData(
-                      fitInsideHorizontally: true,
-                      fitInsideVertically: true,
-                      getTooltipItems: (touchedSpots) {
-                        return touchedSpots.map((LineBarSpot touchedSpot) {
-                          return LineTooltipItem(
-                            '${axis[touchedSpot.barIndex].getY(touchedSpot.y).toStringAsFixed(records[axis[touchedSpot.barIndex].label]!.precision)}${records[axis[touchedSpot.barIndex].label]!.unit}', const TextStyle(),
-                          );
-                        }).toList();
-                      },
-                    ),
-                  ),
-                ), 
+          Expanded(child:
+          Row(
+            children:[
+              Padding(
+                padding: const EdgeInsets.only(bottom:20),
+                child:
+                  Row(
+                    children:[
+                      for (var ax in visibleAxis) customYAxis(ax)
+                    ],
+                  ), 
               ),
-            ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(left:20, top:4),
+                    child: LineChart(
+                      //key: ValueKey(_zoomSliderValues),
+                      LineChartData (
+                      //borderData: FlBorderData(border: const Border(bottom: BorderSide(), left: BorderSide())),
+                      gridData:const FlGridData(horizontalInterval: 1/numTicks),
+                      lineBarsData: [
+                        for (var ax in visibleAxis)
+                          LineChartBarData(spots: ax.spots, dotData: const FlDotData(show: false,), color:ax.colour),
+                      ],
+                      titlesData: const FlTitlesData(
+                        topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)), 
+                        //bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, interval: 20)),
+                      ),
+                      minY: 0,
+                      maxY: 1.0,
+                      lineTouchData: LineTouchData(
+                        touchTooltipData: LineTouchTooltipData(
+                          fitInsideHorizontally: true,
+                          fitInsideVertically: true,
+                          getTooltipItems: (touchedSpots) {
+                            return touchedSpots.map((LineBarSpot touchedSpot) {
+                              return LineTooltipItem(
+                                '${visibleAxis[touchedSpot.barIndex].realY(touchedSpot.y).toStringAsFixed(records[visibleAxis[touchedSpot.barIndex].label]!.precision)}${records[visibleAxis[touchedSpot.barIndex].label]!.unit}', 
+                                const TextStyle(),
+                              );
+                            }).toList();
+                          },
+                        ),
+                      ),
+                    ), 
+                    duration: const Duration(milliseconds: 0), // Animation duration, setting to zero to turn off
+                  ),
+                ),
+              ),
+            ],
+          ),
+          ),
+          SizedBox( // the range slider needs it's height defined otherwise the 'Expanded' has no bounds and explodes
+            height: 30,
+            child:
+            RangeSlider(
+              min: 0,
+              max: 1.0,
+              values: _zoomSliderValues, 
+              onChanged: (RangeValues values) {
+                for (var ax in axis) {
+                  ax.updateSpots(values);
+                  ax.updateScale();
+                }
+              setState(() {
+                _zoomSliderValues = values;
+              });
+            
+              },
+            )
           ),
         ],
       ),
