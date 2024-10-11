@@ -142,18 +142,9 @@ class Recording {
     } 
   }
 
-  // VERY inefficient. Basically unworkably so. 
-  // Also not very good as not all values are changed at the same time. I probably need to do like
-  // I used to and create the data a row at a time, ideally only on data changes. 
-  // Fundamentally I can have records that are hundreds of thousands of entries and millions of 
-  // ticks long. This just creates problems.
-
-  // Alternative approach...
-  // use a variable to track when each list will next change. Walk though time and if a variable 
-  // (or vairables) are changing, then create a row. It will mean that rows won't be a fixed time
-  // step, but does that matter?
-
-  // Or, just give up entirely.
+  // Earlier attempts tried to use a single string for the whole CSV file.
+  // This was very slow as strings are immutable so needed to be copied for every
+  // character addition. As the string gets longer this gets slower and slower.
   List<String> getCSV() {
     List<String> sortedColumns = values.keys.toList()..sort((a, b) => records[a]!.column.compareTo(records[b]!.column));
     Map<String, int> timeKeeper = {};
@@ -163,6 +154,7 @@ class Recording {
     List<String> csv = [];
     String line = "Time";
 
+    // Generate header row and initalize
     for (var label in sortedColumns) {
       timeKeeper[label] = 0;
       var sampleRate = settings[records[label]!.setting]!.value;
@@ -172,18 +164,20 @@ class Recording {
       }
       line += ", ${records[label]!.title}";
     }
-
     csv.add(line);
 
+    // Loop through all time in smallest tick increment. For each time build a row and
+    // keep track of which index applies for the current time for each record.
     for (int tick = 0; tick < values[longestList]!.length; tick++) {
       var time = tick * shortestTick * tickDuration;
       line = time.toStringAsFixed(3);
       for (var label in sortedColumns) {
-        if (time > values[label]![timeKeeper[label]!][0] && 
-            timeKeeper[label]! < values[label]!.length - 1) {
-          timeKeeper[label] = timeKeeper[label]! + 1;
+        var data = values[label]!;
+        var dataIndex = timeKeeper[label]!;
+        if (time > data[dataIndex][0] && dataIndex + 1 < data.length) {
+          timeKeeper[label] = dataIndex + 1;
         }
-        double value = values[label]![timeKeeper[label]!][1];
+        double value = data[dataIndex][1];
         line += ", ${value.toStringAsFixed(records[label]!.precision)}";
       }
       csv.add(line);
