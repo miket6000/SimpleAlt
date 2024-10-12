@@ -16,6 +16,7 @@ class _SettingPageState extends State<SettingPage> {
   List<ConfigurableSetting> settingWidgets = [];
   List<RecordDisplaySetting> displayWidgets = [];
   Map<String, int> initValues = {};
+  double flashUtilization = 0;
 
   void updateSettings() {
     final scaffold = ScaffoldMessenger.of(context);
@@ -53,34 +54,63 @@ class _SettingPageState extends State<SettingPage> {
     for (var record in records.keys) {
       displayWidgets.add(RecordDisplaySetting(record: records[record]!));
     }
+
+    flashUtilization = widget.altimeter.flashUtilization;
     
     super.initState();    
   }
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(8),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.center,
+    bool wideScreen = MediaQuery.sizeOf(context).width > 1000;
+
+    return 
+      SingleChildScrollView(child:
+      Padding(
+        padding: const EdgeInsets.all(8),
+        child: Column(
         children: [
-          const Text("Plot Settings"),
-          ...displayWidgets,
-          const Text("Altimeter Settings"),
-          ...settingWidgets,
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children:[
-              ElevatedButton(
-                onPressed: updateSettings, 
-                child: const Text("Upload Settings"),
-              )
-            ],
-          ),
-        ],
+        Flex(
+          direction: wideScreen ? Axis.horizontal : Axis.vertical,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+              Container(
+                constraints: const BoxConstraints(maxWidth:500, maxHeight: 300), 
+                child: Column(
+                  children: [
+                    const Text("Plot Settings"),
+                    ...displayWidgets,
+                  ]
+                ),
+              ),
+              Container(
+                constraints: const BoxConstraints(maxWidth:500, maxHeight: 400),
+                child: Column( 
+                  children:[
+                    const Text("Altimeter Settings"),
+                    ...settingWidgets,
+                  ]
+                ),
+              ),
+          ]   
+        ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children:[
+            Text("${((1 - flashUtilization) * 100).toStringAsFixed(2)}% Flash Remaining"),
+            ElevatedButton(
+              onPressed: updateSettings, 
+              child: const Text("Upload Settings"),
+            )
+          ],
+        ),
+        ]
+      )
       )
     );
   }
+
 }
 

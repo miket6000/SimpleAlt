@@ -9,6 +9,7 @@ class Altimeter {
   static const flashSize = 0x200000;
   static const altimeterInternalBufferSize = 64;
   static const uidLength = 16;
+  double flashUtilization = 0;
   List<Recording> recordingList = [];
   Uint8List buffer = Uint8List(flashSize);
   
@@ -161,6 +162,7 @@ class Altimeter {
         recordStartAddress = value;
       }
     }
+    flashUtilization = recordStartAddress / flashSize;
   }
 
   bool saveSetting(String setting) {

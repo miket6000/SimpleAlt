@@ -78,12 +78,6 @@ int swapBytes(Uint8List bytes) {
   return value;
 }
 
-extension X<T> on List<List<double>> {
-  double lastBefore(double n) {
-    return where((e)=>(e[0] <= n)).toList().last[0];   
-  }
-}
-
 class Recording {
   int index = 0;
   double maxAltitude = 0;
@@ -131,7 +125,9 @@ class Recording {
     String label = String.fromCharCode(buffer[index]);
     while(!endOfBuffer && records.containsKey(label)) {
       Unit unit = units[records[label]!.unit]!;
-      double value = swapBytes(buffer.sublist(index + 1, index + 1 + records[label]!.length)) / unit.slope + unit.offset;
+      int start = index + 1;
+      int end = index + 1 + records[label]!.length;
+      double value = swapBytes(buffer.sublist(start, end)) / unit.slope + unit.offset;
       addValue(label, value);
       index += records[label]!.length + 1;
       if (index < buffer.length) {
