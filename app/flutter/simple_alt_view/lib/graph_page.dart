@@ -29,11 +29,12 @@ class GraphPage extends StatefulWidget {
 class GraphPageState extends State<GraphPage> with AutomaticKeepAliveClientMixin {
   //final GlobalKey<_AltitudeChartState> _key = GlobalKey();
   Recording? selectedRecording;
+  List<Recording> recordingList = [];
 
   @override
   bool get wantKeepAlive => true;
 
-  void refreshLogList() {
+  void refreshDropList() {
     selectedRecording = null;
     if (widget.altimeter.recordingList.isNotEmpty) {
       selectedRecording = widget.altimeter.recordingList.last;
@@ -41,12 +42,10 @@ class GraphPageState extends State<GraphPage> with AutomaticKeepAliveClientMixin
     setState(() { /* update dropdown menu */ });
   }
 
+  // external facing function to force state update. Not pretty, but the easiest way to allow the settings page to update the graph.
   void update() {
-    setState(() {
-
-    });
+    setState(() {});
   }
-
 
   void onSave() {
     final scaffold = ScaffoldMessenger.of(context);
@@ -60,7 +59,9 @@ class GraphPageState extends State<GraphPage> with AutomaticKeepAliveClientMixin
       var second = now.second.toString().padLeft(2, '0');
       var datetime = "${now.year}$month${day}_$hour$minute$second"; 
       
-      String filename = "SimpleAlt-${widget.altimeter.uid.toRadixString(16)}-${widget.altimeter.recordingList.indexOf(selectedRecording!)}-$datetime.csv";
+      String uidStr = widget.altimeter.uid.toRadixString(16);
+      String indexStr = widget.altimeter.recordingList.indexOf(selectedRecording!).toString();
+      String filename = "SimpleAlt-$uidStr-$indexStr [$datetime].csv";
       String csv = selectedRecording!.getCSV().join("\n");
       File file = File(filename);
       file.writeAsStringSync(csv);
@@ -73,22 +74,27 @@ class GraphPageState extends State<GraphPage> with AutomaticKeepAliveClientMixin
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    super.build(context);
-    DropdownMenu recordingDropdown = DropdownMenu<Recording>(
+  DropdownMenu<Recording> recordingDropdown() {
+    return DropdownMenu<Recording> (
       initialSelection: selectedRecording,
       width: 400, 
       onSelected: (Recording? recording) {
         // user selected a recording...
         selectedRecording = recording!;
-        widget.altimeter.recordingList[recording.index]; // get data for selected recording
-        setState(() {});
+        setState(() {});  
       },
-      dropdownMenuEntries: widget.altimeter.recordingList.map<DropdownMenuEntry<Recording>>((Recording recording) {
-        return DropdownMenuEntry<Recording>(value: recording, label: 'Recording ${widget.altimeter.recordingList.indexOf(recording)}, duration ${recording.getDuration().toStringAsFixed(1)}s');
+      dropdownMenuEntries: recordingList.map<DropdownMenuEntry<Recording>>((Recording recording) {
+        String indexStr = recordingList.indexOf(recording).toString(); 
+        String durationStr = recording.getDuration().toStringAsFixed(1); 
+        return DropdownMenuEntry<Recording>(value: recording, label: "Recording $indexStr, duration ${durationStr}s");
       }).toList(),
     );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    recordingList = widget.altimeter.recordingList;
 
     return Column(
         mainAxisAlignment: MainAxisAlignment.start,
@@ -106,7 +112,7 @@ class GraphPageState extends State<GraphPage> with AutomaticKeepAliveClientMixin
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                recordingDropdown,
+                recordingDropdown(),
                 const Spacer(),
                 ElevatedButton(
                   onPressed: onSave, 

@@ -11,26 +11,25 @@ class HomePage extends StatelessWidget {
   HomePage({super.key, required this.title});
 
   void connectAltimeter() {
-    final altimeter = Altimeter();
-    if(altimeter.findAltimeter()) {
+    int uid = altimeter.connect();
+    if(uid != 0) {
       altimeter.sync();
       scaffoldKey.currentState!.showSnackBar(
         SnackBar(
-          content: Text("Successfully connected to ${altimeter.uid}")
+          content: Text("Successfully connected to ${altimeter.uid.toRadixString(16)}")
         )
       );
     } else {
       altimeter.sync(filename:"621e7440.dump");
       scaffoldKey.currentState!.showSnackBar(
         SnackBar(
-          content: Text("Could not connect to altimeter, instead loaded ${altimeter.uid} from file")
+          content: Text("Could not connect to altimeter, instead loaded ${altimeter.uid.toRadixString(16)} from file")
         )
       );
     }
 
-    altimeter.recordingList.clear();
     altimeter.parseData();
-    graphPageKey.currentState?.refreshLogList();
+    graphPageKey.currentState?.refreshDropList();
   }
 
   @override

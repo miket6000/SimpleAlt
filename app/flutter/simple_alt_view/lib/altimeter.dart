@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:developer' as dev;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_libserialport/flutter_libserialport.dart';
 import 'recording.dart';
@@ -43,13 +44,14 @@ class Altimeter {
     return port;
   }
 
-  Altimeter._constructor() {
+  int connect() {
+    uid = 0;
     if (findAltimeter()) {
       SerialPort? sp = openPort();
       if (sp != null) {
         final disableInteractive = Uint8List.fromList("i\n".codeUnits);
         final getUID = Uint8List.fromList("UID\n".codeUnits);
-        buffer.fillRange(0, flashSize, 0x55);
+         buffer.fillRange(0, flashSize, 0x55);
       
         sp.write(disableInteractive, timeout: 1000);
         sp.read(1000, timeout: 1000); // clear the read buffer
@@ -59,7 +61,10 @@ class Altimeter {
         sp.close();
       }
     }
+    return uid;        
+  }
 
+  Altimeter._constructor() {
     _instance = this;
   }
 
@@ -68,24 +73,33 @@ class Altimeter {
    * 'len' must be less than the length of the altimeters intern buffer and must not extend beyond 
    * the end of flash or the request is ignored.
    */
-  void getBlock(int startAddress, int len) {
-    if (startAddress > flashSize) { return; }
-    if (len < 0) { return; }
+  int getBlock(int startAddress, int len) {
+    if (startAddress > flashSize) { return 0; }
+    if (len < 0 || len > altimeterInternalBufferSize) { return 0; }
     
-    if (len <= altimeterInternalBufferSize && startAddress + len < (flashSize - 1)) {
-      final readCommand = Uint8List.fromList("r $startAddress $len\n".codeUnits);
-      port!.write(readCommand, timeout: 1000);
-      buffer.setRange(startAddress, startAddress + len, port!.read(len, timeout: 1000));
+    final bytesToRead = startAddress + len < flashSize ? len : flashSize - startAddress;
+    final readCommand = Uint8List.fromList("r $startAddress $bytesToRead\n".codeUnits);
+    
+    port!.write(readCommand, timeout: 1000);
+    Uint8List received = port!.read(len, timeout: 1000); 
+    
+    if (received.length != len) {
+      dev.log("Insuffucient bytes received. Read ${received.length}, expected $len");
     }
+    
+    buffer.setRange(startAddress, startAddress + received.length, received);
+    
+    return received.length;
   }
 
   /*
    * Copies 'len' bytes from the altimeter to the internal buffer using multiple calls to getBlock(). 
    * Attempts to copy beyond the end of flash will result in the copy stopping when the end of flash is reached.
    */
-  void getData(int startAddress, int len) {
-    if (startAddress > flashSize) { return; }
-    if (len < 0) { return; }
+  int getData(int startAddress, int len) {
+    int bytesRead = 0;
+    if (startAddress > flashSize) { return 0; }
+    if (len < 0) { return 0; }
 
     final int endAddress = (startAddress + len < flashSize ? startAddress + len : flashSize);
     int address = startAddress;
@@ -97,10 +111,12 @@ class Altimeter {
       if (bytesToGet > altimeterInternalBufferSize) {
         bytesToGet = altimeterInternalBufferSize;
       }
-      getBlock(address, bytesToGet);
+      bytesRead += getBlock(address, bytesToGet);
       address += bytesToGet;
     }
+
     port!.close();
+    return bytesRead;
   }
 
   /* 
@@ -120,23 +136,46 @@ class Altimeter {
     if (filename == null) {
       filename = "${uid.toRadixString(16)}.dump"; 
       var file = File(filename);
+      getData(0, indexSize);
+      int endOfData = findDataEnd();
       if (file.existsSync()) {
         fileBuffer = File(filename).readAsBytesSync();
-        getData(0, indexSize);
         if(listEquals(buffer.sublist(0, indexSize), fileBuffer.sublist(0, indexSize))) {
           buffer.setAll(0, fileBuffer);
         } else {
-          getData(indexSize, flashSize - indexSize);
+          getData(indexSize, endOfData - indexSize);
         }
       } else {
-        getData(0, flashSize);
+        getData(indexSize, endOfData - indexSize);
       }
+
       save();
     } else {
       var fileBuffer = File(filename).readAsBytesSync();
       buffer.setAll(0, fileBuffer);
     }
   }
+
+  int findDataEnd() {
+    const int recordLength = 5;
+    const int labelLength = 1;
+    int eof = indexSize; 
+
+    for (int settingIndex = 0; settingIndex + recordLength < indexSize - 1; settingIndex += recordLength) {
+      String label = String.fromCharCode(buffer[settingIndex]);
+      if (label == String.fromCharCode(0xff)) {
+        break;
+      }
+      var reversedList = buffer.sublist(settingIndex + labelLength, settingIndex + recordLength);
+      int value = swapBytes(reversedList);
+    
+      if (label == "r") {
+        eof = value;
+      }
+    }
+    return eof;
+  }
+
 
   /* 
    * Steps through the data reconstructing recordings based on the relevant settings as they
@@ -145,14 +184,18 @@ class Altimeter {
    */ 
   void parseData() {
     const int recordLength = 5;
+    const int labelLength = 1;
     int recordStartAddress = indexSize; 
+
+    // clean out old data
+    recordingList.clear();
 
     for (int settingIndex = 0; settingIndex + recordLength < indexSize - 1; settingIndex += recordLength) {
       String label = String.fromCharCode(buffer[settingIndex]);
       if (label == String.fromCharCode(0xff)) {
         break;
       }
-      var reversedList = buffer.sublist(settingIndex + 1, settingIndex + 5);
+      var reversedList = buffer.sublist(settingIndex + labelLength, settingIndex + recordLength);
       int value = swapBytes(reversedList);
 
       settings[label]!.value = value;
@@ -162,7 +205,7 @@ class Altimeter {
         recordStartAddress = value;
       }
     }
-    flashUtilization = recordStartAddress / flashSize;
+    flashUtilization = (recordStartAddress - indexSize) / (flashSize - indexSize);
   }
 
   bool saveSetting(String setting) {

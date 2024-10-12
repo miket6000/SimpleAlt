@@ -116,10 +116,13 @@ class _AltitudeChartState extends State<AltitudeChart> {
   static const numTicks = 20;
   RangeValues _zoomSliderValues = const RangeValues(0, 1.0);
   List<YAxis> axis = [];
+  Recording? lastRecording;
   
   @override
   Widget build(BuildContext context) {
-    if (widget.recording != null && axis.isEmpty) {
+    if (widget.recording != lastRecording && widget.recording != null) {
+      lastRecording = widget.recording;
+      axis.clear();
       for (var recordLabel in widget.recording!.values.keys) {
         axis.add(YAxis(widget.recording!, recordLabel, numTicks));
       }
