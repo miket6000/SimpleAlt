@@ -1,4 +1,5 @@
 #include "filesystem.h"
+#include <stdbool.h>
 #include "w25qxx.h"
 
 /* Memory Map
@@ -56,16 +57,29 @@ FSResult fs_flush() {
 }
 
 FSResult fs_save(char label, void *data, uint16_t len) {
+  uint8_t retry = 3;
+  bool write_incomplete = true;
+
   if (next_free_address + len + 1 >= RECORDING_END_ADDRESS) {
     return FS_ERR;
   }
 
   fs_state = FS_DIRTY;
 
-  w25qxx_write(&w25qxx, next_free_address, (uint8_t *)&label, 1);
-  next_free_address += 1;
-  w25qxx_write(&w25qxx, next_free_address, (uint8_t *)data, len);
-  next_free_address += len;
+  if (w25qxx_write(&w25qxx, next_free_address, (uint8_t *)&label, 1) == W25QXX_Ok) {
+    next_free_address += 1;
+    while (retry-- > 0 && write_incomplete) {
+      if (w25qxx_write(&w25qxx, next_free_address, (uint8_t *)data, len) == W25QXX_Ok) {
+        next_free_address += len;
+        write_incomplete = false;
+      }    
+    }
+  }
+
+  if (write_incomplete) {
+    return FS_ERR;
+  };
+  
   return FS_OK;
 }
 
