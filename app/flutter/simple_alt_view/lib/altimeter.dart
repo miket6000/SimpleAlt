@@ -51,7 +51,7 @@ class Altimeter {
       if (sp != null) {
         final disableInteractive = Uint8List.fromList("i\n".codeUnits);
         final getUID = Uint8List.fromList("UID\n".codeUnits);
-         buffer.fillRange(0, flashSize, 0x55);
+        buffer.fillRange(0, flashSize, 0xff);
       
         sp.write(disableInteractive, timeout: 1000);
         sp.read(1000, timeout: 1000); // clear the read buffer

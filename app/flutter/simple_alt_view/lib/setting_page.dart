@@ -4,14 +4,16 @@ import 'package:simple_alt_view/altimeter.dart';
 import 'recording_display_setting.dart';
 import 'configuable_setting.dart';
 
+final GlobalKey<SettingPageState> settingPageKey = GlobalKey<SettingPageState>(); 
+
 class SettingPage extends StatefulWidget {
   final Altimeter altimeter;
   const SettingPage({super.key, required this.altimeter});
   @override
-  State<SettingPage> createState() => _SettingPageState();
+  State<SettingPage> createState() => SettingPageState();
 }
 
-class _SettingPageState extends State<SettingPage> {
+class SettingPageState extends State<SettingPage> {
   Recording? selectedRecording;
   List<ConfigurableSetting> settingWidgets = [];
   List<RecordDisplaySetting> displayWidgets = [];
@@ -41,6 +43,10 @@ class _SettingPageState extends State<SettingPage> {
         ),
       );
     }
+    setState(() {});
+  }
+
+  void update() {
     setState(() {});
   }
 

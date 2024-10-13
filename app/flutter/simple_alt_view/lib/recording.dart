@@ -23,11 +23,10 @@ class Record {
   final String setting;
   final String unit;
   final int precision;  //CSV print prescision
-  final int column;     //CSV column (0 is always time)
   double time = 0;
   bool plot;            //Do or donot show in graphs
   Color colour;         //Colour of graph line and axis text
-  Record({required this.title, required this.setting, required this.length, required this.unit, required this.precision, required this.column, this.plot=true, this.colour=Colors.blue});
+  Record({required this.title, required this.setting, required this.length, required this.unit, required this.precision, this.plot=true, this.colour=Colors.blue});
 }
 
 final Map<String, Setting> settings = {
@@ -53,15 +52,15 @@ const Map<String, Unit> units = {
 };
 
 final Map<String, Record> records = {
-  "A": Record(title:"Altitude",    setting:"a", length:4, unit:"m",   precision:1, column:1, colour:Colors.blue,    plot:true),
-  "P": Record(title:"Pressure",    setting:"p", length:4, unit:"hPa", precision:2, column:2, colour:Colors.orange,  plot:false),
-  "T": Record(title:"Temperature", setting:"t", length:2, unit:"°C",  precision:1, column:3, colour:Colors.red,     plot:true),
-  "V": Record(title:"Voltage",     setting:"v", length:2, unit:"V",   precision:2, column:4, colour:Colors.purple,  plot:false),
-  "S": Record(title:"Status",      setting:"s", length:1, unit:"-",   precision:0, column:5, colour:Colors.green,   plot:false),
+  "A": Record(title:"Altitude",    setting:"a", length:4, unit:"m",   precision:1, colour:Colors.blue,    plot:true),
+  "P": Record(title:"Pressure",    setting:"p", length:4, unit:"hPa", precision:2, colour:Colors.orange,  plot:false),
+  "T": Record(title:"Temperature", setting:"t", length:2, unit:"°C",  precision:1, colour:Colors.red,     plot:true),
+  "V": Record(title:"Voltage",     setting:"v", length:2, unit:"V",   precision:2, colour:Colors.purple,  plot:false),
+  "S": Record(title:"Status",      setting:"s", length:1, unit:"-",   precision:0, colour:Colors.green,   plot:false),
 };
 
 int swapBytes(Uint8List bytes) {
-  int value = 0;
+  var value = 0;
   if (bytes.length == 1) {
     value = bytes[0].toInt();
   } else if (bytes.length == 2) {
@@ -79,9 +78,9 @@ int swapBytes(Uint8List bytes) {
 }
 
 class Recording {
-  int index = 0;
-  double maxAltitude = 0;
-  double groundLevel = double.infinity;
+  var index = 0;
+  var maxAltitude = 0.0;
+  var groundLevel = double.infinity;
 
   Map<String, List<List<double>>> values = {};
 
@@ -109,27 +108,30 @@ class Recording {
     }
 
     // Add the value to the record for this sample, and all the next unrecorded samples indicated by the sampleRate.
-    var sampleRate = settings[records[label]!.setting]!.value;
+    final sampleRate = settings[records[label]!.setting]!.value;
     values[label] ??= [];
     values[label]!.add([records[label]!.time, value]);
     records[label]!.time += tickDuration * sampleRate;
   }
 
   Recording(Uint8List buffer) {
-    int index = 0;
-    bool endOfBuffer = false;
+    var index = 0;
+    var endOfBuffer = false;
 
     // reset record times
     records.forEach((k,v)=>(v.time = 0));
 
     String label = String.fromCharCode(buffer[index]);
+    
+    // walk through buffer adding values to correct records based on labels
     while(!endOfBuffer && records.containsKey(label)) {
-      Unit unit = units[records[label]!.unit]!;
-      int start = index + 1;
-      int end = index + 1 + records[label]!.length;
-      double value = swapBytes(buffer.sublist(start, end)) / unit.slope + unit.offset;
-      addValue(label, value);
-      index += records[label]!.length + 1;
+      final record = records[label]!;
+      final unit = units[record.unit]!;
+      final start = index + 1;
+      final end = index + 1 + record.length;
+      final value = swapBytes(buffer.sublist(start, end)) / unit.slope + unit.offset;
+      addValue(label, value); 
+      index += record.length + 1;
       if (index < buffer.length) {
         label = String.fromCharCode(buffer[index]);
       } else {
@@ -142,7 +144,7 @@ class Recording {
   // This was very slow as strings are immutable so needed to be copied for every
   // character addition. As the string gets longer this gets slower and slower.
   List<String> getCSV() {
-    List<String> sortedColumns = values.keys.toList()..sort((a, b) => records[a]!.column.compareTo(records[b]!.column));
+    List<String> columns = values.keys.toList();
     Map<String, int> timeKeeper = {};
     var shortestTick = 0xffffffff;
     var longestList = "";
@@ -151,7 +153,7 @@ class Recording {
     String line = "Time";
 
     // Generate header row and initalize
-    for (var label in sortedColumns) {
+    for (var label in columns) {
       timeKeeper[label] = 0;
       var sampleRate = settings[records[label]!.setting]!.value;
       if (sampleRate < shortestTick) {
@@ -167,7 +169,7 @@ class Recording {
     for (int tick = 0; tick < values[longestList]!.length; tick++) {
       var time = tick * shortestTick * tickDuration;
       line = time.toStringAsFixed(3);
-      for (var label in sortedColumns) {
+      for (var label in columns) {
         var data = values[label]!;
         var dataIndex = timeKeeper[label]!;
         if (time > data[dataIndex][0] && dataIndex + 1 < data.length) {

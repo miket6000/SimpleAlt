@@ -30,6 +30,7 @@ class HomePage extends StatelessWidget {
 
     altimeter.parseData();
     graphPageKey.currentState?.refreshDropList();
+    settingPageKey.currentState?.update();
   }
 
   @override
@@ -56,7 +57,7 @@ class HomePage extends StatelessWidget {
         body: TabBarView(
           children: [
             GraphPage(key: graphPageKey, altimeter: altimeter),
-            SettingPage(altimeter: altimeter),
+            SettingPage(key: settingPageKey, altimeter: altimeter),
           ],
         ),
       ),

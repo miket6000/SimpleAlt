@@ -70,25 +70,29 @@ class YAxis {
   double realY(double y) => y * scale.range + scale.min;
   double graphY(double y) => (y - scale.min) / scale.range;
   
-  updateScale() {
-    var min = visibleValues.reduce((a, b)=>(a[1] < b[1] ? a : b))[1]; 
-    var max = visibleValues.reduce((a, b)=>(a[1] > b[1] ? a : b))[1];
-    scale.update(min, max);
-  }
-
-  updateSpots(RangeValues zoom) {
+  update(RangeValues zoom) {
+    // get all values within current zoom window
     var length = recording.values[label]!.length;
     visibleValues = recording.values[label]!.sublist((length * zoom.start).toInt(), (length * zoom.end).toInt());
+    
+    // reduce down to max 2000 points to keep the UI snappy
     int reduction = visibleValues.length ~/ 2000;
-    spots = [...visibleValues.everyNth(reduction).map((e)=>FlSpot(e[0], graphY(e[1])))];
+    visibleValues = visibleValues.everyNth(reduction);
+
+    // update the scale to fit the new values
+    var min = visibleValues.isNotEmpty ? visibleValues.reduce((a, b)=>(a[1] < b[1] ? a : b))[1] : scale.min; 
+    var max = visibleValues.isNotEmpty ? visibleValues.reduce((a, b)=>(a[1] > b[1] ? a : b))[1] : scale.max;
+    scale.update(min, max);
+
+    // and get the new spots.
+    spots = [...visibleValues.map((e)=>FlSpot(e[0], graphY(e[1])))]; 
   }
 
   YAxis(this.recording, this.label, this.numTicks) {
     colour = records[label]!.colour;
     visibleValues = recording.values[label]!;
     scale = Scale(numTicks:numTicks);
-    updateScale();
-    updateSpots(const RangeValues(0, 1.0));
+    update(const RangeValues(0, 1.0));
   }
 }
 
@@ -196,8 +200,7 @@ class _AltitudeChartState extends State<AltitudeChart> {
               values: _zoomSliderValues, 
               onChanged: (RangeValues values) {
                 for (var ax in axis) {
-                  ax.updateSpots(values);
-                  ax.updateScale();
+                  ax.update(values);
                 }
               setState(() {
                 _zoomSliderValues = values;
