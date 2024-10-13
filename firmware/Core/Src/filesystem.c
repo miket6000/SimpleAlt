@@ -57,28 +57,20 @@ FSResult fs_flush() {
 }
 
 FSResult fs_save(char label, void *data, uint16_t len) {
-  uint8_t retry = 3;
-  bool write_incomplete = true;
-
+  uint8_t buffer[32];
   if (next_free_address + len + 1 >= RECORDING_END_ADDRESS) {
     return FS_ERR;
   }
 
   fs_state = FS_DIRTY;
 
-  if (w25qxx_write(&w25qxx, next_free_address, (uint8_t *)&label, 1) == W25QXX_Ok) {
-    next_free_address += 1;
-    while (retry-- > 0 && write_incomplete) {
-      if (w25qxx_write(&w25qxx, next_free_address, (uint8_t *)data, len) == W25QXX_Ok) {
-        next_free_address += len;
-        write_incomplete = false;
-      }    
-    }
+  buffer[0] = (uint8_t)label;
+  for (uint8_t i = 0; i < len; i++) {
+    buffer[i+1] = ((uint8_t *)data)[i];
   }
-
-  if (write_incomplete) {
-    return FS_ERR;
-  };
+  
+  w25qxx_write(&w25qxx, next_free_address, buffer, len + 1);
+  next_free_address += (len + 1);
   
   return FS_OK;
 }
@@ -99,9 +91,16 @@ FSResult fs_read_config(char label, uint32_t *variable) {
 }
 
 FSResult fs_save_config(char label, void *data) {
+  uint8_t buffer[] = {
+    (uint8_t)label, 
+    ((uint8_t *)data)[0], 
+    ((uint8_t *)data)[1], 
+    ((uint8_t *)data)[2], 
+    ((uint8_t *)data)[3]
+  };
+  
   if ((next_free_index + 5) < INDEX_END_ADDRESS) {
-    w25qxx_write(&w25qxx, next_free_index, (uint8_t *)&label, 1);
-    w25qxx_write(&w25qxx, next_free_index + 1, (uint8_t *)data, 4);
+    w25qxx_write(&w25qxx, next_free_index, buffer, 5);
     next_free_index += 5;
     return FS_OK;
   }
