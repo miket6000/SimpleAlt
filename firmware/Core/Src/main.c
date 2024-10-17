@@ -49,10 +49,6 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
-#define STATE_IDLE 0
-#define STATE_RECORDING 1
-
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -71,12 +67,13 @@ uint8_t rx_buffer[APP_RX_DATA_SIZE];
 uint16_t tx_buffer_index = 0;
 uint16_t rx_buffer_index = 0;
 uint32_t uid = 0;
-uint8_t usb_connect = 1;
-enum {USB_CONNECT, USB_DISCONNECT, USB_NO_CHANGE};
+
+typedef enum {STATE_IDLE, STATE_RECORDING} State;
+typedef enum {USB_NO_CHANGE, USB_CONNECT, USB_DISCONNECT} UsbConnectionEvent;
+UsbConnectionEvent usb_connect = USB_NO_CHANGE;
 
 // led flash sequences
 const int8_t idle_sequence[] = {1, PAUSE, -2};
-const int8_t usb_sequence[] = {0, -1};
 const int8_t recording_sequence[] = {2, -1}; 
 const int8_t button_sequence[] = {1, 2, 3, PAUSE, -1};
 
@@ -122,8 +119,8 @@ void task_record_value(void *param) {
 }
 
 void task_every_tick(void *param) {
-  uint8_t *state = (uint8_t *)param;
-  static uint8_t last_state = STATE_IDLE;
+  State *state = (State *)param;
+  static State last_state = STATE_IDLE;
   static int32_t ground_altitude = 0;
   static uint32_t max_altitude = 0;
   static ButtonState button_state = BUTTON_IDLE;
@@ -257,7 +254,7 @@ void init_task(uint8_t *state) {
 int main(void) {
 
   /* USER CODE BEGIN 1 */
-  uint8_t state = 0; // 0 = idle, 1 = recording 
+  State state = STATE_IDLE; // 0 = idle, 1 = recording 
 
   /* USER CODE END 1 */
 
@@ -339,7 +336,6 @@ int main(void) {
     /* Deal with data recieved via USB */
     if (rx_buffer_index > 0) {
       led(ON);
-      //power_set_mode(AWAKE); //Dirty hack
       power_idle_reset(); //don't go to sleep if actively in use
       cmd_read_input((char *)rx_buffer, rx_buffer_index);
       rx_buffer_index = 0;
@@ -355,6 +351,7 @@ int main(void) {
   
     // speed up clock if USB connected
     if (usb_connect == USB_CONNECT) {
+      power_set_mode(AWAKE);
       set_clock_divider(RCC_SYSCLK_DIV1);
       HAL_SYSTICK_Config(HAL_RCC_GetHCLKFreq()/100);
       usb_connect = USB_NO_CHANGE;
@@ -362,6 +359,7 @@ int main(void) {
 
     // slow down clock if no USB
     if (usb_connect == USB_DISCONNECT) {
+      power_set_mode(SNOOZE);
       set_clock_divider(RCC_SYSCLK_DIV4);
       HAL_SYSTICK_Config(HAL_RCC_GetHCLKFreq()/100);
       usb_connect = USB_NO_CHANGE;
