@@ -163,7 +163,7 @@ void task_every_tick(void *param) {
   record('A')->value = bmp_get_altitude();    
   
   // Altitude calculations
-  uint32_t altitude_above_ground = record('A')->value - ground_altitude;
+  int32_t altitude_above_ground = record('A')->value - ground_altitude;
   if (altitude_above_ground > 0) {
     if (altitude_above_ground > max_altitude) {
       max_altitude = altitude_above_ground;
@@ -202,8 +202,9 @@ void task_every_tick(void *param) {
       }
       
       break;
-    case STATE_RECORDING: // recording
-      if (last_state != STATE_RECORDING) { // on entry
+    case STATE_RECORDING:
+      if (last_state != STATE_RECORDING) { 
+        // on entry
         led_reset_sequence();
         led_add_sequence(recording_sequence);
         ground_altitude = record('A')->value;
