@@ -33,8 +33,11 @@
 #include "bmp280.h"
 #include "w25qxx.h"
 #include "command.h"
+#include "commands.h"
+#include "task.h"
 #include "button.h"
 #include "filesystem.h"
+#include "record.h"
 #include <stdbool.h>
 
 /* USER CODE END Includes */
@@ -50,12 +53,6 @@
 #define STATE_IDLE 0
 #define STATE_RECORDING 1
 
-#define DEFAULT_ALTITUDE_SR       SECONDS_TO_TICKS(0.05)
-#define DEFAULT_TEMPERATURE_SR    SECONDS_TO_TICKS(1)
-#define DEFAULT_PRESSURE_SR       0
-#define DEFAULT_VOLTAGE_SR        SECONDS_TO_TICKS(1)
-#define DEFAULT_STATUS_SR         0
-#define DEFAULT_POWER_OFF_TIMEOUT SECONDS_TO_TICKS(1200)
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -75,26 +72,9 @@ uint16_t tx_buffer_index = 0;
 uint16_t rx_buffer_index = 0;
 uint32_t uid = 0;
 uint8_t usb_connect = 1;
+enum {USB_CONNECT, USB_DISCONNECT, USB_NO_CHANGE};
 
-typedef struct {
-  uint32_t altitude_sample_rate;
-  uint32_t temperature_sample_rate;
-  uint32_t pressure_sample_rate;
-  uint32_t voltage_sample_rate;
-  uint32_t status_sample_rate;
-  uint32_t power_off_timeout;
-} AltimeterConfig;
-
-
-AltimeterConfig config = {
-  DEFAULT_ALTITUDE_SR,
-  DEFAULT_TEMPERATURE_SR, 
-  DEFAULT_PRESSURE_SR,
-  DEFAULT_VOLTAGE_SR,
-  DEFAULT_STATUS_SR,
-  DEFAULT_POWER_OFF_TIMEOUT
-};
-
+// led flash sequences
 const int8_t idle_sequence[] = {1, PAUSE, -2};
 const int8_t usb_sequence[] = {0, -1};
 const int8_t recording_sequence[] = {2, -1}; 
@@ -108,7 +88,6 @@ void SystemClock_Config(void);
 void USBD_CDC_RxHandler(uint8_t *rxBuffer, uint32_t len);
 void USB_Connect(void);
 void USB_Disconnect(void);
-void print(char *tx_buffer, uint16_t len);
 void set_clock_divider(uint8_t divider);
 
 /* USER CODE END PFP */
@@ -124,173 +103,160 @@ void print(char *tx_buffer, uint16_t len) {
   }
 }
 
-void print_uint32(void *parameter) {
-  char buffer[8];
-  itoa(*(uint32_t *)parameter, buffer, 10);
-  print(buffer, strlen(buffer));
+void load_settings() {  //load settings
+  uint8_t i = 0;
+  Setting **settingList = get_settings();
+  while (settingList[i] != NULL) {
+    fs_read_config(settingList[i]->label, &settingList[i]->value);
+    i++;
+  }
+  // configure power off timeout
+  power_set_timeout(setting('o')->value);
 }
 
-void print_int32(void *parameter) {
-  char buffer[8];
-  itoa(*(int32_t *)parameter, buffer, 10);
-  print(buffer, strlen(buffer));
+void task_record_value(void *param) {
+  RecordType *record = (RecordType *)param;
+  if (*(record->state) == STATE_RECORDING) {
+    fs_save(record->label, &record->value, record->size);
+  }
 }
 
-void print_uint16(void *parameter) {
-  char buffer[8];
-  itoa(*(uint16_t *)parameter, buffer, 10);
-  print(buffer, strlen(buffer));
-}
+void task_every_tick(void *param) {
+  uint8_t *state = (uint8_t *)param;
+  static uint8_t last_state = STATE_IDLE;
+  static int32_t ground_altitude = 0;
+  static uint32_t max_altitude = 0;
+  static ButtonState button_state = BUTTON_IDLE;
 
-void print_int16(void *parameter) {
-  char buffer[8];
-  itoa(*(int16_t *)parameter, buffer, 10);
-  print(buffer, strlen(buffer));
-}
+  /* Non-reentrant timer based function calls */
+  led_blink();
+  power_tick();
+  button_state = button_get_state();
 
-void print_uint8(void *parameter) {
-  char buffer[8];
-  itoa(*(uint8_t *)parameter, buffer, 10);
-  print(buffer, strlen(buffer));
-}
-
-void print_int8(void *parameter) {
-  char buffer[8];
-  itoa(*(int8_t *)parameter, buffer, 10);
-  print(buffer, strlen(buffer));
-}
-
-// W address bytes
-void write_flash(void *parameter) {
-  char* param;
-  uint32_t address = 0;
-  uint8_t len = 0;
-  uint8_t flash_buffer[64];
-
-  param = cmd_get_param();
-  if (param != NULL) {
-    address = atoi(param);
+  /* check button presses */
+  switch (button_state) {
+    case BUTTON_DOWN:
+      led_reset_sequence();
+      led_add_sequence(button_sequence);
+    case BUTTON_HELD: // do nothing
+      break; 
+    case BUTTON_RELEASE_0: // handled in state machine code
+      power_idle_reset();
+      break;
+    case BUTTON_RELEASE_1: // handled in state machine code
+      power_idle_reset();
+      break;
+    case BUTTON_RELEASE_2:
+      power_set_mode(SLEEP);
+      break;
+    case BUTTON_RELEASE_3:
+      power_set_mode(SHUTDOWN);
+      break;
+    case BUTTON_IDLE: // do nothing
+      break;
   }
 
-  param = cmd_get_param();
-  // WARNING NO CHECKS!!
-  while (param != NULL) {
-    flash_buffer[len++] = atoi(param);
-    param = cmd_get_param();
-  }
-
-  if (len > 0) {
-    fs_raw_write(address, flash_buffer, len);
-  } 
-}
-
-// R address bytes
-void read_flash(void *parameter) {
-  uint32_t address;
-  uint8_t len;
-  uint8_t flash_buffer[64];
-
-  char str_buf[3] = {0};
+  // Measurements
+  record('V')->value = power_get_battery_voltage();
+  record('T')->value = bmp_get_temperature();
+  record('P')->value = bmp_get_pressure();
+  record('A')->value = bmp_get_altitude();    
   
-  address = atoi(cmd_get_param());
-  len = atoi(cmd_get_param());
-
-  if (len > 0) {
-    fs_raw_read(address, flash_buffer, len);
-    for (int i = 0; i < len; i++) {
-      if (flash_buffer[i] < 0x10) {
-        print("0",1);
-      }
-      print(itoa(flash_buffer[i], str_buf, 16), strlen(str_buf));
+  // Altitude calculations
+  uint32_t altitude_above_ground = record('A')->value - ground_altitude;
+  if (altitude_above_ground > 0) {
+    if (altitude_above_ground > max_altitude) {
+      max_altitude = altitude_above_ground;
     }
   }
+
+  // State specific behaviour and transitions
+  switch (*state) {
+    case STATE_IDLE:
+      if (last_state != STATE_IDLE) {
+        led_reset_sequence();
+        if (last_state == STATE_RECORDING) { 
+          // minimum height increase to eliminate accidental press/cancel
+          if (ALTITUDE_IN_METERS(max_altitude) > 1) {
+            uint32_t altitude_in_meters = ALTITUDE_IN_METERS(max_altitude);
+            led_add_number_sequence(altitude_in_meters);
+            fs_save_config('m', &altitude_in_meters);
+          } else {
+            led_add_sequence(idle_sequence);
+          }
+          fs_flush(); // write the log end address to the index table.
+        } else { 
+          // not sure how we got here, but lets do something sensible
+          led_add_sequence(idle_sequence);
+        }
+      }
+      
+      last_state = *state;
+      
+      // ignore short press, proper press change to recording
+      if (button_state == BUTTON_RELEASE_0) {
+        led_reset_sequence();
+        led_add_sequence(idle_sequence);
+      } else if (button_state == BUTTON_RELEASE_1) {
+        *state = STATE_RECORDING;
+      }
+      
+      break;
+    case STATE_RECORDING: // recording
+      if (last_state != STATE_RECORDING) { // on entry
+        led_reset_sequence();
+        led_add_sequence(recording_sequence);
+        ground_altitude = record('A')->value;
+        max_altitude = 0;
+      }
+
+      last_state = *state;
+
+      // ignore short press, proper press change to idle
+      if (button_state == BUTTON_RELEASE_0) {
+        led_reset_sequence();
+        led_add_sequence(recording_sequence);
+      } else if (button_state == BUTTON_RELEASE_1) {
+        *state = STATE_IDLE;
+      }
+      
+      break;
+  } // switch(state)
 }
 
-// r address bytes
-void read_flash_binary(void *parameter) {
-  uint32_t address;
-  uint8_t len;
-  uint8_t flash_buffer[64];
-  
-  address = atoi(cmd_get_param());
-  len = atoi(cmd_get_param());
-
-  if (len > 0 && len <= sizeof(flash_buffer)) {
-    fs_raw_read(address, flash_buffer, len);
-    print((char *)flash_buffer, len);
+void init_task(uint8_t *state) {
+  uint8_t i = 0;
+  RecordType **recordList = get_record_types();
+  while(recordList[i] != NULL) {
+    if (recordList[i]->setting->value > 0) {
+      recordList[i]->state = state;
+      Task t;
+      t.callback = task_record_value;
+      t.param = recordList[i];
+      t.delay = recordList[i]->setting->value;
+      add_task(t);
+    }
+    i++;
   }
-}
 
-void erase_flash(void *parameter) {
-  AltimeterConfig *config = (AltimeterConfig *)parameter;
-  // delete everything
-  fs_erase();
-  // restore current config so it can be loaded on power up
-  fs_save_config('p', &config->pressure_sample_rate);
-  fs_save_config('t', &config->temperature_sample_rate);
-  fs_save_config('a', &config->altitude_sample_rate);
-  fs_save_config('v', &config->voltage_sample_rate);
-  fs_save_config('s', &config->status_sample_rate);
-  fs_save_config('o', &config->power_off_timeout);
-  print("OK", 2);
-}
-
-void factory_reset(void *parameter) {
-  AltimeterConfig *config = (AltimeterConfig *)parameter;
-  
-  // set the default config, then call erase flash. 
-  config->altitude_sample_rate    = DEFAULT_ALTITUDE_SR;
-  config->pressure_sample_rate    = DEFAULT_PRESSURE_SR;
-  config->temperature_sample_rate = DEFAULT_TEMPERATURE_SR;
-  config->voltage_sample_rate     = DEFAULT_VOLTAGE_SR;
-  config->status_sample_rate      = DEFAULT_STATUS_SR;
-  config->power_off_timeout       = DEFAULT_POWER_OFF_TIMEOUT;
-  
-  erase_flash(config);
+  Task t;
+  t.callback = task_every_tick;
+  t.param = state;
+  t.delay = 1;
+  add_task(t);
 }
 
 
-void set_config(void *parameter) {
-  char *label = cmd_get_param();
-  uint32_t value = atoi(cmd_get_param());
-  fs_save_config(label[0], &value);
-  print("OK", 2); 
-}
-
-void get_config(void *parameter) {
-  char *label = cmd_get_param();
-  uint32_t value = 0xFFFFFFFF;
-  fs_read_config(label[0], &value);
-  char str_buf[10] = {0};
-  print(itoa(value, str_buf, 10), strlen(str_buf));
-}
-
-void get_uid(void *parameter) {
-  char str_buf[10] = {0};
-  print(itoa(uid, str_buf, 16), strlen(str_buf));
-}
 /* USER CODE END 0 */
 
 /**
   * @brief  The application entry point.
   * @retval int
   */
-int main(void)
-{
+int main(void) {
 
   /* USER CODE BEGIN 1 */
-  uint32_t tick = 0;
-  uint32_t last_tick = 0;
-  
-  int32_t ground_altitude = 0;
-  int32_t altitude_above_ground = 0;
-  uint32_t max_altitude = 0;
-
-  int32_t altitude = 0;
-  int16_t temperature = 0;
-  uint32_t pressure = 101325;
-  uint16_t voltage = 0;
-  uint8_t status = 0;
+  uint8_t state = 0; // 0 = idle, 1 = recording 
 
   /* USER CODE END 1 */
 
@@ -319,21 +285,15 @@ int main(void)
   MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
 
+  // Initalize peripherals, load settings and initialize the task system
   bmp_init(BMP_CS_GPIO_Port, BMP_CS_Pin);
   fs_init(&hspi1, FLASH_CS_GPIO_Port, FLASH_CS_Pin);
-  //uid = fs_get_uid();
   uid = HAL_GetUIDw0() ^ HAL_GetUIDw1() ^ HAL_GetUIDw2();
-  
-  fs_read_config('p', &config.pressure_sample_rate);
-  fs_read_config('t', &config.temperature_sample_rate);
-  fs_read_config('a', &config.altitude_sample_rate);
-  fs_read_config('v', &config.voltage_sample_rate);
-  fs_read_config('s', &config.status_sample_rate);
-  fs_read_config('o', &config.power_off_timeout);
-  fs_read_config('m', &max_altitude);
+  load_settings();
+  init_task(&state);
 
-  power_set_timeout(config.power_off_timeout);
-
+  // setup previous altitude flash
+  uint32_t max_altitude = setting('m')->value;
   if (max_altitude > 0) {
     led_add_number_sequence(max_altitude);
   }
@@ -343,157 +303,37 @@ int main(void)
   // Calibrate The ADC On Power-Up For Better Accuracy
   HAL_ADCEx_Calibration_Start(&hadc);
   
-  cmd_add("P", print_uint32, &pressure); 
-  cmd_add("T", print_int16, &temperature); 
-  cmd_add("A", print_int32, &altitude); 
-  cmd_add("V", print_uint16, &voltage);
-  cmd_add("ERASE", erase_flash, &config);
-  cmd_add("RESET", factory_reset, &config);
+  // init command line interpreter
+  cmd_add("P", print_uint32, &record('P')->value); 
+  cmd_add("T", print_int16, &record('T')->value); 
+  cmd_add("A", print_int32, &record('A')->value); 
+  cmd_add("V", print_uint16, &record('V')->value);
+  cmd_add("ERASE", erase_flash, NULL);
+  cmd_add("RESET", factory_reset, NULL);
   cmd_add("I", cmd_set_interactive, NULL);
   cmd_add("i", cmd_unset_interactive, NULL);
   cmd_add("R", read_flash, NULL);
   cmd_add("r", read_flash_binary, NULL);
+  cmd_add("W", write_flash, NULL);
+  cmd_add("w", write_flash, NULL);
   cmd_add("SET", set_config, NULL);
   cmd_add("GET", get_config, NULL);
   cmd_add("UID", print_uint32, &uid);
   cmd_set_print_function(print);
 
-  // Wait for the button to be released
+  // Wait for the button to be released (assumption is that it was pressed to wake us up)
   while (button_read() == BUTTON_DOWN);
 
-  /* USER CODE END 2 */
-
-  uint8_t state = 0; // 0 = idle, 1 = recording 
-  uint8_t last_state = 0;
-  ButtonState button_state = BUTTON_IDLE;
-
   /* Infinite loop */
+  /* USER CODE END 2 */
   /* USER CODE BEGIN WHILE */
   while (1) {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
 
-    tick = HAL_GetTick();
-    if ((tick - last_tick) >= 1) {
-      last_tick = tick;
-
-      /* Non-reentrant timer based function calls */
-      led_blink();
-      button_state = button_get_state();
-      power_tick();
-
-      /* check button presses */
-      switch (button_state) {
-        case BUTTON_DOWN:
-          led_reset_sequence();
-          led_add_sequence(button_sequence);
-        case BUTTON_HELD: // do nothing
-          break; 
-        case BUTTON_RELEASE_0: // handled in state machine code
-          power_idle_reset();
-          break;
-        case BUTTON_RELEASE_1: // handled in state machine code
-          power_idle_reset();
-          break;
-        case BUTTON_RELEASE_2:
-          power_set_mode(SLEEP);
-          break;
-        case BUTTON_RELEASE_3:
-          power_set_mode(SHUTDOWN);
-          break;
-        case BUTTON_IDLE: // do nothing
-          break;
-      }
-
-      /* Measurements */
-      voltage = power_get_battery_voltage();
-      temperature = bmp_get_temperature();
-      pressure = bmp_get_pressure();
-      altitude = bmp_get_altitude();    
-      
-      altitude_above_ground = altitude - ground_altitude;
-      if (altitude_above_ground > 0) {
-        if (altitude_above_ground > max_altitude) {
-          max_altitude = altitude_above_ground;
-        }
-      }
-
-      /* State specific behaviour and transitions */
-      switch (state) {
-        case STATE_IDLE:
-          if (last_state != STATE_IDLE) {
-            if (last_state == STATE_RECORDING) { 
-              led_reset_sequence();
-              // minimum height increase to eliminate accidental press/cancel
-              if (ALTITUDE_IN_METERS(max_altitude) > 1) {
-                uint32_t altitude_in_meters = ALTITUDE_IN_METERS(max_altitude);
-                led_add_number_sequence(altitude_in_meters);
-                fs_save_config('m', &altitude_in_meters);
-              } else {
-                led_add_sequence(idle_sequence);
-              }
-              fs_flush(); // write the log end address to the index table.
-            } else { // not sure how we got here, but lets do something sensible
-              led_reset_sequence();
-              led_add_sequence(idle_sequence);
-            }
-          }
-          
-          last_state = state;
-          
-          // ignore short press, proper press change to recording
-          if (button_state == BUTTON_RELEASE_0) {
-            led_reset_sequence();
-            led_add_sequence(idle_sequence);
-          } else if (button_state == BUTTON_RELEASE_1) {
-            state = STATE_RECORDING;
-          }
-          
-          break;
-        case STATE_RECORDING: // recording
-          if (last_state != STATE_RECORDING) { // on entry
-            led_reset_sequence();
-            led_add_sequence(recording_sequence);
-            ground_altitude = altitude;
-            max_altitude = 0;
-          }
-
-          last_state = state;
-
-          // save the data
-          if (config.altitude_sample_rate != 0 && tick % config.altitude_sample_rate == 0) {
-            fs_save('A', &altitude,     sizeof(altitude));
-          }
-          
-          if (config.pressure_sample_rate != 0 && tick % config.pressure_sample_rate == 0) {
-            fs_save('P', &pressure,     sizeof(pressure));
-          }
-
-          if (config.temperature_sample_rate != 0 && tick % config.temperature_sample_rate == 0) {
-            fs_save('T', &temperature,  sizeof(temperature));
-          }
-          
-          if (config.voltage_sample_rate != 0 && tick % config.voltage_sample_rate == 0) {
-            fs_save('V', &voltage,      sizeof(voltage));
-          }
-          
-          if (config.status_sample_rate != 0 && tick % config.status_sample_rate == 0) {
-            fs_save('S', &status,       sizeof(status));
-          }
-
-          // ignore short press, proper press change to idle
-          if (button_state == BUTTON_RELEASE_0) {
-            led_reset_sequence();
-            led_add_sequence(recording_sequence);
-          } else if (button_state == BUTTON_RELEASE_1) {
-            state = STATE_IDLE;
-          }
-          
-          break;
-      } // switch(state)
-
-    } // Tick > refresh time
+    // Time dependant task  
+    execute_task();
 
     /* Deal with data recieved via USB */
     if (rx_buffer_index > 0) {
@@ -512,21 +352,22 @@ int main(void)
       }
     }
   
+    // speed up clock if USB connected
+    if (usb_connect == USB_CONNECT) {
+      set_clock_divider(RCC_SYSCLK_DIV1);
+      HAL_SYSTICK_Config(HAL_RCC_GetHCLKFreq()/100);
+      usb_connect = USB_NO_CHANGE;
+    }
+
+    // slow down clock if no USB
+    if (usb_connect == USB_DISCONNECT) {
+      set_clock_divider(RCC_SYSCLK_DIV4);
+      HAL_SYSTICK_Config(HAL_RCC_GetHCLKFreq()/100);
+      usb_connect = USB_NO_CHANGE;
+    }
 
     // Pause execution until woken by an interrupt.
     // The systick will do this for us every 10 ms if we're in normal mode.
-    if (usb_connect == 2) {
-      set_clock_divider(RCC_SYSCLK_DIV1);
-      HAL_SYSTICK_Config(HAL_RCC_GetHCLKFreq()/100);
-      usb_connect = 1;
-    }
-
-    if (usb_connect == 0) {
-      set_clock_divider(RCC_SYSCLK_DIV4);
-      HAL_SYSTICK_Config(HAL_RCC_GetHCLKFreq()/100);
-      usb_connect = 1;
-    }
-
     power_management();
   }
   /* USER CODE END 3 */
@@ -601,11 +442,11 @@ void USBD_CDC_RxHandler(uint8_t *rxBuffer, uint32_t len) {
 }
 
 void USB_Connect(void) {
-  usb_connect = 2;
+  usb_connect = USB_CONNECT;
 }
 
 void USB_Disconnect(void) {
-  usb_connect = 0;
+  usb_connect = USB_DISCONNECT;
 }
 
 /* USER CODE END 4 */
