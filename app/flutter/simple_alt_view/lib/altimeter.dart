@@ -68,6 +68,22 @@ class Altimeter {
     _instance = this;
   }
 
+  int sendCommand(String cmd) {
+    SerialPort? sp = openPort();
+    String response = "";
+    if (sp != null) {
+      final cmdList = Uint8List.fromList([...cmd.codeUnits,'\n'.codeUnitAt(0)]);
+      sp.write(cmdList, timeout: 1000);
+      response = sp.read(uidLength, timeout: 1000).toString();
+      sp.close();
+    }
+    
+    if (response.compareTo("OK\n") == 1) {
+      return 0;
+    }
+    return -1;
+  }
+
   /* 
    * Copies 'len' bytes from the altimeter into the internal buffer starting at 'startAdderss'.
    * 'len' must be less than the length of the altimeters intern buffer and must not extend beyond 

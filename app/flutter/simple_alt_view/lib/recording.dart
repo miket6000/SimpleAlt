@@ -24,7 +24,7 @@ class Record {
   final String unit;
   final int precision;  //CSV print prescision
   double time = 0;
-  bool plot;            //Do or donot show in graphs
+  bool plot;            //Do or do not show in graphs
   Color colour;         //Colour of graph line and axis text
   Record({required this.title, required this.setting, required this.length, required this.unit, required this.precision, this.plot=true, this.colour=Colors.blue});
 }
@@ -38,6 +38,7 @@ final Map<String, Setting> settings = {
   "m": Setting(title:"Maximum Altitude", configurable:false),
   "o": Setting(title:"Power Off Timeout"),
   "r": Setting(title:"Recording Start Address", configurable:false),
+  "n": Setting(title:"Altimeter Name", configurable:false),
 };
 
 const Map<String, Unit> units = {

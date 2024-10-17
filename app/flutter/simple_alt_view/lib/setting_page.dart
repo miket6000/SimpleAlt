@@ -46,6 +46,16 @@ class SettingPageState extends State<SettingPage> {
     setState(() {});
   }
 
+  void erase() {
+    widget.altimeter.sendCommand("ERASE");
+    setState(() {});
+  }
+
+  void factoryReset() {
+    widget.altimeter.sendCommand("RESET");
+    setState(() {});
+  }
+
   void update() {
     setState(() {});
   }
@@ -101,15 +111,38 @@ class SettingPageState extends State<SettingPage> {
               ),
           ]   
         ),
-        Row(
+        Flex(
+          direction: wideScreen ? Axis.horizontal : Axis.vertical,
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           crossAxisAlignment: CrossAxisAlignment.end,
           children:[
-            Text("${((1 - flashUtilization) * 100).toStringAsFixed(2)}% Flash Remaining"),
-            ElevatedButton(
-              onPressed: updateSettings, 
-              child: const Text("Upload Settings"),
-            )
+            Row(
+              //mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              //crossAxisAlignment: CrossAxisAlignment.end,
+              children:[
+                Text("${((1 - flashUtilization) * 100).toStringAsFixed(2)}% Flash Remaining"),
+                const SizedBox(width:100),
+                ElevatedButton(
+                  onPressed: erase, 
+                  child: const Text("Erase Flash"),
+                ),
+              ]
+            ),
+            Row(
+              //mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              //crossAxisAlignment: CrossAxisAlignment.end,
+              children:[
+                ElevatedButton(
+                  onPressed: factoryReset, 
+                  child: const Text("Factory Reset"),
+                ),
+                const SizedBox(width:100),
+                ElevatedButton(
+                  onPressed: updateSettings, 
+                  child: const Text("Upload Settings"),
+                ),
+              ]
+            ),
           ],
         ),
         ]

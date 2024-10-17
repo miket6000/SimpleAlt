@@ -14,7 +14,7 @@ class _RecordDisplaySettingState extends State<RecordDisplaySetting> {
   @override
   Widget build(BuildContext context) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisAlignment: MainAxisAlignment.start,
       children: [
         Switch(
           value: widget.record.plot, 
@@ -27,7 +27,6 @@ class _RecordDisplaySettingState extends State<RecordDisplaySetting> {
           padding: const EdgeInsets.only(left:10), 
           child: Text(widget.record.title),
         ),
-        const Spacer(),
       ]
     );
   }
