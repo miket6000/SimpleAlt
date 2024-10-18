@@ -42,7 +42,7 @@ void power_tick() {
       break;
     case 3:
       HAL_GPIO_WritePin(nSENSE_EN_GPIO_Port, nSENSE_EN_Pin, GPIO_PIN_SET);
-      if (voltage < VOLTAGE_LOW_ALARM) {
+      if (voltage < VOLTAGE_LOW_ALARM && power_mode != AWAKE) {
         power_mode = SLEEP; 
       }
       break;
@@ -52,7 +52,7 @@ void power_tick() {
       break;
   }
 
-  if (idle_timer-- == 0 && idle_timeout > MIN_TIMEOUT) {
+  if (idle_timer-- == 0 && idle_timeout > MIN_TIMEOUT && power_mode != AWAKE) {
     power_mode = SLEEP;
   }
 }

@@ -69,8 +69,6 @@ uint16_t rx_buffer_index = 0;
 uint32_t uid = 0;
 
 typedef enum {STATE_IDLE, STATE_RECORDING} State;
-typedef enum {USB_NO_CHANGE, USB_CONNECT, USB_DISCONNECT} UsbConnectionEvent;
-UsbConnectionEvent usb_connect = USB_NO_CHANGE;
 
 // led flash sequences
 const int8_t idle_sequence[] = {1, PAUSE, -2};
@@ -254,7 +252,7 @@ void init_task(uint8_t *state) {
 int main(void) {
 
   /* USER CODE BEGIN 1 */
-  State state = STATE_IDLE; // 0 = idle, 1 = recording 
+  State state = STATE_IDLE; 
 
   /* USER CODE END 1 */
 
@@ -336,7 +334,6 @@ int main(void) {
     /* Deal with data recieved via USB */
     if (rx_buffer_index > 0) {
       led(ON);
-      power_idle_reset(); //don't go to sleep if actively in use
       cmd_read_input((char *)rx_buffer, rx_buffer_index);
       rx_buffer_index = 0;
     }
@@ -348,23 +345,6 @@ int main(void) {
         tx_buffer_index = 0;
       }
     }
-  
-    // speed up clock if USB connected
-    if (usb_connect == USB_CONNECT) {
-      power_set_mode(AWAKE);
-      set_clock_divider(RCC_SYSCLK_DIV1);
-      HAL_SYSTICK_Config(HAL_RCC_GetHCLKFreq()/100);
-      usb_connect = USB_NO_CHANGE;
-    }
-
-    // slow down clock if no USB
-    if (usb_connect == USB_DISCONNECT) {
-      power_set_mode(SNOOZE);
-      set_clock_divider(RCC_SYSCLK_DIV4);
-      HAL_SYSTICK_Config(HAL_RCC_GetHCLKFreq()/100);
-      usb_connect = USB_NO_CHANGE;
-    }
-
     // Pause execution until woken by an interrupt.
     // The systick will do this for us every 10 ms if we're in normal mode.
     power_management();
@@ -418,9 +398,6 @@ void SystemClock_Config(void)
 
 void set_clock_divider(uint8_t divider) {
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
-
-  /** Initializes the CPU, AHB and APB buses clocks
-  */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI48;
@@ -441,11 +418,15 @@ void USBD_CDC_RxHandler(uint8_t *rxBuffer, uint32_t len) {
 }
 
 void USB_Connect(void) {
-  usb_connect = USB_CONNECT;
+  power_set_mode(AWAKE);
+  set_clock_divider(RCC_SYSCLK_DIV1);
+  HAL_SYSTICK_Config(HAL_RCC_GetHCLKFreq()/100);
 }
 
 void USB_Disconnect(void) {
-  usb_connect = USB_DISCONNECT;
+  power_set_mode(SNOOZE);
+  set_clock_divider(RCC_SYSCLK_DIV4);
+  HAL_SYSTICK_Config(HAL_RCC_GetHCLKFreq()/100);
 }
 
 /* USER CODE END 4 */

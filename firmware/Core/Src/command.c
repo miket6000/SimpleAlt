@@ -97,6 +97,12 @@ void cmd_read_input(char *buffer, uint8_t len) {
       if (buffer_index >= RX_BUFFER_LEN) {
         buffer_index = 0;
       }
+    } else if (inchar == '\b') {
+      if (buffer_index > 0) {
+        cmd_print("\b \b", 3);
+        rx_buffer[buffer_index] = '\0';
+        buffer_index--;
+      }
     }
   }
 }
