@@ -23,10 +23,18 @@ class _RecordDisplaySettingState extends State<RecordDisplaySetting> {
             setState(() => widget.record.plot = value);
           },
         ), 
-        Padding(
-          padding: const EdgeInsets.only(left:10), 
-          child: Text(widget.record.title),
+        Padding (
+          padding: const EdgeInsets.only(left:10, right:10),
+          child: Container(
+            width: 30.0,
+            height: 30.0,
+            decoration: BoxDecoration(
+              color: widget.record.colour,
+              shape: BoxShape.circle,
+            ),
+          ),
         ),
+        Text(widget.record.title),
       ]
     );
   }

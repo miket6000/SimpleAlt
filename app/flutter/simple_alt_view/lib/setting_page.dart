@@ -78,7 +78,8 @@ class SettingPageState extends State<SettingPage> {
 
   @override
   Widget build(BuildContext context) {
-    bool wideScreen = MediaQuery.sizeOf(context).width > 1000;
+    const double widgetWidth = 400;
+    bool wideScreen = MediaQuery.sizeOf(context).width > (widgetWidth * 2);
 
     return 
       SingleChildScrollView(child:
@@ -92,7 +93,7 @@ class SettingPageState extends State<SettingPage> {
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
               Container(
-                constraints: const BoxConstraints(maxWidth:500, maxHeight: 300), 
+                constraints: const BoxConstraints(maxWidth: widgetWidth, maxHeight: 300), 
                 child: Column(
                   children: [
                     const Text("Plot Settings"),
@@ -101,7 +102,7 @@ class SettingPageState extends State<SettingPage> {
                 ),
               ),
               Container(
-                constraints: const BoxConstraints(maxWidth:500, maxHeight: 400),
+                constraints: const BoxConstraints(maxWidth: widgetWidth, maxHeight: 400),
                 child: Column( 
                   children:[
                     const Text("Altimeter Settings"),
@@ -121,7 +122,7 @@ class SettingPageState extends State<SettingPage> {
               //crossAxisAlignment: CrossAxisAlignment.end,
               children:[
                 Text("${((1 - flashUtilization) * 100).toStringAsFixed(2)}% Flash Remaining"),
-                const SizedBox(width:100),
+                const SizedBox(width:60),
                 ElevatedButton(
                   onPressed: erase, 
                   child: const Text("Erase Flash"),
@@ -136,7 +137,7 @@ class SettingPageState extends State<SettingPage> {
                   onPressed: factoryReset, 
                   child: const Text("Factory Reset"),
                 ),
-                const SizedBox(width:100),
+                const SizedBox(width:60),
                 ElevatedButton(
                   onPressed: updateSettings, 
                   child: const Text("Upload Settings"),

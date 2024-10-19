@@ -56,7 +56,7 @@ class _ConfigurableSettingState extends State<ConfigurableSetting> {
           ),
         ),
         SizedBox(
-          width:200, 
+          width:100, 
           child: valueTextField, 
         ),
       ]
