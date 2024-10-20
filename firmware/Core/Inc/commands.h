@@ -14,6 +14,7 @@ void read_flash(void *parameter);
 void read_flash_binary(void *parameter);
 void erase_flash(void *parameter);
 void factory_reset(void *parameter);
+void reboot(void *parameter);
 void set_config(void *parameter);
 void get_config(void *parameter);
 void get_uid(void *parameter);

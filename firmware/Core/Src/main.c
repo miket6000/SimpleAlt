@@ -132,47 +132,31 @@ void load_settings() {  //load settings
 
 void task_record_value(void *param) {
   RecordType *record = (RecordType *)param;
-  if (*(record->state) == STATE_RECORDING) {
+  if (*(record->state) == STATE_RECORDING && record->setting->value > 0) {
     fs_save(record->label, &record->value, record->size);
   }
 }
 
-/*
-void task_update_altitude_buffer(void *param) {
-  FlightStatus *fs = (FlightStatus *)param;
-  ringbuffer_add(&fs->altitudes, record('A')->value);
-}
-*/
-
 void update_flight_status(FlightStatus *fs) {
   // Altitude & status calculations
   uint32_t time = HAL_GetTick();
-  //int32_t altitude_above_ground = fs->altitude - fs->ground_level;
-  //if (altitude_above_ground > 0) {
-    if (!(fs->status & (1 << LAUNCH)) && fs->altitude > fs->ground_level + LAUNCH_THRESHOLD) {
-      fs->status |= (1 << LAUNCH);
-    }
-    if ((fs->status & (1 << LAUNCH)) && fs->altitude > fs->max_altitude) {
-      fs->max_altitude = fs->altitude;
-      fs->max_altitude_time = time;
-    }
-    if ((fs->status & (1 << LAUNCH)) && (time - fs->max_altitude_time) > NOSE_OVER_TIMEOUT) {
-      fs->status |= (1 << APOGEE);
-    }
-    if((fs->status & (1 << APOGEE)) && fs->altitude < fs->descent_altitude) {
-      fs->descent_altitude = fs->altitude;
-      fs->descent_altitude_time = time;
-    }
-    if ((fs->status & (1 << APOGEE)) && (time - fs->descent_altitude_time) > LANDING_TIMEOUT) {
-      fs->status |= (1 << LANDED);
-    }
-
-/*
-}
-  if ((fs->status & (1 << APOGEE)) && abs(fs->altitude - ringbuffer_read(&fs->altitudes, -LANDING_TIMEOUT)) < LANDING_NOISE_BAND) {
+  if (!(fs->status & (1 << LAUNCH)) && fs->altitude > fs->ground_level + LAUNCH_THRESHOLD) {
+    fs->status |= (1 << LAUNCH);
+  }
+  if ((fs->status & (1 << LAUNCH)) && fs->altitude > fs->max_altitude) {
+    fs->max_altitude = fs->altitude;
+    fs->max_altitude_time = time;
+  }
+  if ((fs->status & (1 << LAUNCH)) && (time - fs->max_altitude_time) > NOSE_OVER_TIMEOUT) {
+    fs->status |= (1 << APOGEE);
+  }
+  if((fs->status & (1 << APOGEE)) && fs->altitude < fs->descent_altitude) {
+    fs->descent_altitude = fs->altitude;
+    fs->descent_altitude_time = time;
+  }
+  if ((fs->status & (1 << APOGEE)) && (time - fs->descent_altitude_time) > LANDING_TIMEOUT) {
     fs->status |= (1 << LANDED);
   }
-  */
 }
 
 void task_every_tick(void *param) {
@@ -274,37 +258,31 @@ void task_every_tick(void *param) {
   } // switch(state)
 }
 
-void init_task(Context *context) {
+void init_recording_task(Context *context) {
   uint8_t i = 0;
-  RecordType **recordList = get_record_types();
-  
+  RecordType **recordList = get_record_types();  
   // variable recordings
   while(recordList[i] != NULL) {
     if (recordList[i]->setting->value > 0) {
-      recordList[i]->state = &context->state;
       Task t;
       t.callback = task_record_value;
       t.param = recordList[i];
       t.delay = recordList[i]->setting->value;
       add_task(t);
+      recordList[i]->state = &context->state;
     }
     i++;
   }
+}
 
-  Task t;
+void init_task(Context *context) {
+  Task main_task;
+  main_task.callback = task_every_tick;
+  main_task.param = context;
+  main_task.delay = 1;
+  add_task(main_task);
 
-  // every tick
-  t.callback = task_every_tick;
-  t.param = context;
-  t.delay = 1;
-  add_task(t);
-/*
-  // landing timeout
-  t.callback = task_update_altitude_buffer;
-  t.param = context->flight_status;
-  t.delay = SECONDS_TO_TICKS(1);
-  add_task(t);
-*/
+  init_recording_task(context);
 }
 
 
@@ -377,7 +355,8 @@ int main(void) {
   cmd_add("A", print_int32, &record('A')->value); 
   cmd_add("V", print_uint16, &record('V')->value);
   cmd_add("ERASE", erase_flash, NULL);
-  cmd_add("RESET", factory_reset, NULL);
+  cmd_add("FACTORY", factory_reset, NULL);
+  cmd_add("REBOOT", reboot, NULL);
   cmd_add("I", cmd_set_interactive, NULL);
   cmd_add("i", cmd_unset_interactive, NULL);
   cmd_add("R", read_flash, NULL);

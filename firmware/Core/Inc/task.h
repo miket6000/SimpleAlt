@@ -11,7 +11,7 @@ typedef struct {
   uint32_t nextExecutionTime;
 } Task;
 
-int add_task(Task task);
+Task *add_task(Task task);
 void execute_task();
 
 #endif //TASK_H

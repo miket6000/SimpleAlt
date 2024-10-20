@@ -4,14 +4,14 @@
 static Task taskList[MAX_NUM_TASK];
 static uint8_t lastTask = 0;
 
-int add_task(Task task) {
+Task *add_task(Task task) {
   uint32_t time = HAL_GetTick();
   if (lastTask + 1 > MAX_NUM_TASK) {
-    return 1;
+    return NULL;
   }
   task.nextExecutionTime = time + task.delay;
   taskList[lastTask++] = task;
-  return 0;
+  return &taskList[lastTask - 1];
 }
 
 void execute_task() {

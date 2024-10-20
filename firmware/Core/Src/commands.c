@@ -122,11 +122,21 @@ void factory_reset(void *parameter) {
   erase_flash(NULL);
 }
 
+void reboot(void *parameter) {
+  HAL_NVIC_SystemReset();
+}
+
 void set_config(void *parameter) {
   char *label = cmd_get_param();
   uint32_t value = atoi(cmd_get_param());
   fs_save_config(label[0], &value);
-  print("OK", 2); 
+  Setting *s = setting(label[0]);
+  if (s != NULL) {
+    s->value = value;
+    print("OK", 2);
+  } else {
+    print("ERR", 3);
+  }
 }
 
 void get_config(void *parameter) {
