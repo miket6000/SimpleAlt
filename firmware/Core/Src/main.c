@@ -38,6 +38,7 @@
 #include "button.h"
 #include "filesystem.h"
 #include "record.h"
+#include "ringbuffer.h"
 #include <stdbool.h>
 
 /* USER CODE END Includes */
@@ -49,6 +50,10 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define LAUNCH_THRESHOLD        100
+#define NOSE_OVER_TIMEOUT       SECONDS_TO_TICKS(0.5)
+#define LANDING_NOISE_BAND      100
+#define LANDING_TIMEOUT         SECONDS_TO_TICKS(5)
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -69,6 +74,23 @@ uint16_t rx_buffer_index = 0;
 uint32_t uid = 0;
 
 typedef enum {STATE_IDLE, STATE_RECORDING} State;
+typedef enum {LAUNCH, APOGEE, LANDED} Status;
+
+typedef struct {
+  uint8_t status;
+  int32_t ground_level;
+  int32_t altitude;
+  int32_t max_altitude;
+  uint32_t max_altitude_time;
+  int32_t descent_altitude;
+  uint32_t descent_altitude_time;
+} FlightStatus;
+
+typedef struct { 
+  State state;
+  State last_state;
+  FlightStatus *flight_status;
+} Context;
 
 // led flash sequences
 const int8_t idle_sequence[] = {1, PAUSE, -2};
@@ -116,13 +138,49 @@ void task_record_value(void *param) {
   }
 }
 
-void task_every_tick(void *param) {
-  State *state = (State *)param;
-  static State last_state = STATE_IDLE;
-  static int32_t ground_altitude = 0;
-  static uint32_t max_altitude = 0;
-  static ButtonState button_state = BUTTON_IDLE;
+/*
+void task_update_altitude_buffer(void *param) {
+  FlightStatus *fs = (FlightStatus *)param;
+  ringbuffer_add(&fs->altitudes, record('A')->value);
+}
+*/
 
+void update_flight_status(FlightStatus *fs) {
+  // Altitude & status calculations
+  uint32_t time = HAL_GetTick();
+  //int32_t altitude_above_ground = fs->altitude - fs->ground_level;
+  //if (altitude_above_ground > 0) {
+    if (!(fs->status & (1 << LAUNCH)) && fs->altitude > fs->ground_level + LAUNCH_THRESHOLD) {
+      fs->status |= (1 << LAUNCH);
+    }
+    if ((fs->status & (1 << LAUNCH)) && fs->altitude > fs->max_altitude) {
+      fs->max_altitude = fs->altitude;
+      fs->max_altitude_time = time;
+    }
+    if ((fs->status & (1 << LAUNCH)) && (time - fs->max_altitude_time) > NOSE_OVER_TIMEOUT) {
+      fs->status |= (1 << APOGEE);
+    }
+    if((fs->status & (1 << APOGEE)) && fs->altitude < fs->descent_altitude) {
+      fs->descent_altitude = fs->altitude;
+      fs->descent_altitude_time = time;
+    }
+    if ((fs->status & (1 << APOGEE)) && (time - fs->descent_altitude_time) > LANDING_TIMEOUT) {
+      fs->status |= (1 << LANDED);
+    }
+
+/*
+}
+  if ((fs->status & (1 << APOGEE)) && abs(fs->altitude - ringbuffer_read(&fs->altitudes, -LANDING_TIMEOUT)) < LANDING_NOISE_BAND) {
+    fs->status |= (1 << LANDED);
+  }
+  */
+}
+
+void task_every_tick(void *param) {
+  Context *context = (Context *)param;
+  FlightStatus *fs = context->flight_status;
+  static ButtonState button_state = BUTTON_IDLE;
+ 
   /* Non-reentrant timer based function calls */
   led_blink();
   power_tick();
@@ -155,25 +213,19 @@ void task_every_tick(void *param) {
   record('V')->value = power_get_battery_voltage();
   record('T')->value = bmp_get_temperature();
   record('P')->value = bmp_get_pressure();
-  record('A')->value = bmp_get_altitude();    
-  
-  // Altitude calculations
-  int32_t altitude_above_ground = record('A')->value - ground_altitude;
-  if (altitude_above_ground > 0) {
-    if (altitude_above_ground > max_altitude) {
-      max_altitude = altitude_above_ground;
-    }
-  }
+  fs->altitude = bmp_get_altitude();
+  record('A')->value = fs->altitude;    
+  record('S')->value = fs->status;
 
   // State specific behaviour and transitions
-  switch (*state) {
+  switch (context->state) {
     case STATE_IDLE:
-      if (last_state != STATE_IDLE) {
+      if (context->last_state != STATE_IDLE) {
         led_reset_sequence();
-        if (last_state == STATE_RECORDING) { 
+        if (context->last_state == STATE_RECORDING) { 
           // minimum height increase to eliminate accidental press/cancel
-          if (ALTITUDE_IN_METERS(max_altitude) > 1) {
-            uint32_t altitude_in_meters = ALTITUDE_IN_METERS(max_altitude);
+          if (ALTITUDE_IN_METERS(fs->max_altitude - fs->ground_level) > 1) {
+            uint32_t altitude_in_meters = ALTITUDE_IN_METERS(fs->max_altitude - fs->ground_level);
             led_add_number_sequence(altitude_in_meters);
             fs_save_config('m', &altitude_in_meters);
           } else {
@@ -186,46 +238,51 @@ void task_every_tick(void *param) {
         }
       }
       
-      last_state = *state;
+      context->last_state = context->state;
       
       // ignore short press, proper press change to recording
       if (button_state == BUTTON_RELEASE_0) {
         led_reset_sequence();
         led_add_sequence(idle_sequence);
       } else if (button_state == BUTTON_RELEASE_1) {
-        *state = STATE_RECORDING;
+        context->state = STATE_RECORDING;
       }
       
       break;
     case STATE_RECORDING:
-      if (last_state != STATE_RECORDING) { 
+      if (context->last_state != STATE_RECORDING) { 
         // on entry
         led_reset_sequence();
         led_add_sequence(recording_sequence);
-        ground_altitude = record('A')->value;
-        max_altitude = 0;
+        fs->ground_level = fs->altitude;
+        fs->max_altitude = fs->ground_level;;
+        fs->descent_altitude = 0x7FFFFFFF; //MAX_INT
+        fs->status = 0;
       }
 
-      last_state = *state;
-
+      context->last_state = context->state;
+      update_flight_status(fs); 
+ 
       // ignore short press, proper press change to idle
       if (button_state == BUTTON_RELEASE_0) {
         led_reset_sequence();
         led_add_sequence(recording_sequence);
       } else if (button_state == BUTTON_RELEASE_1) {
-        *state = STATE_IDLE;
+        context->state = STATE_IDLE;
       }
       
       break;
   } // switch(state)
 }
 
-void init_task(uint8_t *state) {
+void init_task(Context *context) {
   uint8_t i = 0;
   RecordType **recordList = get_record_types();
+  
+  // variable recordings
   while(recordList[i] != NULL) {
     if (recordList[i]->setting->value > 0) {
-      recordList[i]->state = state;
+      recordList[i]->state = &context->state;
       Task t;
       t.callback = task_record_value;
       t.param = recordList[i];
@@ -236,10 +293,19 @@ void init_task(uint8_t *state) {
   }
 
   Task t;
+
+  // every tick
   t.callback = task_every_tick;
-  t.param = state;
+  t.param = context;
   t.delay = 1;
   add_task(t);
+/*
+  // landing timeout
+  t.callback = task_update_altitude_buffer;
+  t.param = context->flight_status;
+  t.delay = SECONDS_TO_TICKS(1);
+  add_task(t);
+*/
 }
 
 
@@ -252,7 +318,13 @@ void init_task(uint8_t *state) {
 int main(void) {
 
   /* USER CODE BEGIN 1 */
-  State state = STATE_IDLE; 
+  FlightStatus flight_status;
+  //ringbuffer_init(&flight_status.altitudes);
+  
+  Context context;
+  context.state = STATE_IDLE;
+  context.last_state = STATE_IDLE;
+  context.flight_status = &flight_status;
 
   /* USER CODE END 1 */
 
@@ -286,7 +358,8 @@ int main(void) {
   fs_init(&hspi1, FLASH_CS_GPIO_Port, FLASH_CS_Pin);
   uid = HAL_GetUIDw0() ^ HAL_GetUIDw1() ^ HAL_GetUIDw2();
   load_settings();
-  init_task(&state);
+
+  init_task(&context);
 
   // setup previous altitude flash
   uint32_t max_altitude = setting('m')->value;
