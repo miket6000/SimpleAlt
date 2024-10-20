@@ -38,7 +38,6 @@
 #include "button.h"
 #include "filesystem.h"
 #include "record.h"
-#include "ringbuffer.h"
 #include <stdbool.h>
 
 /* USER CODE END Includes */
